@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 env:
   ARIA2_VERSION: '1.37.0'
 
@@ -75,8 +78,6 @@ jobs:
     strategy:
       matrix:
         include:
-          - arch: x86_64
-            target: x86_64-apple-darwin
           - arch: aarch64
             target: aarch64-apple-darwin
 
@@ -109,14 +110,7 @@ jobs:
       - name: Prepare aria2c sidecar
         run: |
           mkdir -p src-tauri/binaries
-          # macOS runner is always ARM64 (M1+), we need to handle cross-compilation
-          if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
-            cp $(which aria2c) src-tauri/binaries/aria2c-${{ matrix.target }}
-          else
-            # For x86_64 target on ARM runner, try to get x86_64 binary via arch command
-            # If native aria2c is universal or x86_64, use it directly
-            cp $(which aria2c) src-tauri/binaries/aria2c-${{ matrix.target }}
-          fi
+          cp $(which aria2c) src-tauri/binaries/aria2c-${{ matrix.target }}
           chmod +x src-tauri/binaries/aria2c-${{ matrix.target }}
 
       - name: Build Tauri app
