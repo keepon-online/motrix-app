@@ -66,6 +66,8 @@ fn main() {
             commands::get_engine_version,
             commands::get_task_peers,
             commands::change_task_option,
+            commands::fetch_tracker_list,
+            commands::update_tray_menu,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -16,7 +16,7 @@ import './styles/index.scss'
 import en from './locales/en'
 import zhCN from './locales/zh-CN'
 
-const i18n = createI18n({
+export const i18n = createI18n({
   legacy: false,
   locale: 'en',
   fallbackLocale: 'en',

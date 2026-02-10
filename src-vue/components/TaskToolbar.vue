@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
 
+const { t } = useI18n()
 const taskStore = useTaskStore()
 
 const hasSelection = computed(() => taskStore.selectedGids.length > 0)
@@ -44,10 +46,10 @@ async function removeSelected() {
         @change="toggleSelectAll"
       >
         <span v-if="hasSelection">
-          {{ selectionCount }} selected
+          {{ t('task.selected', { count: selectionCount }) }}
         </span>
         <span v-else>
-          Select all
+          {{ t('task.selectAll') }}
         </span>
       </el-checkbox>
     </div>
@@ -56,29 +58,29 @@ async function removeSelected() {
       <el-button-group>
         <el-button size="small" @click="resumeSelected">
           <el-icon><VideoPlay /></el-icon>
-          Resume
+          {{ t('task.resume') }}
         </el-button>
         <el-button size="small" @click="pauseSelected">
           <el-icon><VideoPause /></el-icon>
-          Pause
+          {{ t('task.pause') }}
         </el-button>
         <el-button size="small" type="danger" @click="removeSelected">
           <el-icon><Delete /></el-icon>
-          Remove
+          {{ t('task.remove') }}
         </el-button>
       </el-button-group>
     </div>
 
     <div class="toolbar-right" v-else>
       <el-button-group>
-        <el-button size="small" @click="taskStore.pauseAllTasks()" title="Pause All">
+        <el-button size="small" @click="taskStore.pauseAllTasks()" :title="t('task.pauseAll')">
           <el-icon><VideoPause /></el-icon>
         </el-button>
-        <el-button size="small" @click="taskStore.resumeAllTasks()" title="Resume All">
+        <el-button size="small" @click="taskStore.resumeAllTasks()" :title="t('task.resumeAll')">
           <el-icon><VideoPlay /></el-icon>
         </el-button>
       </el-button-group>
-      <span class="task-count">{{ totalCount }} tasks</span>
+      <span class="task-count">{{ t('task.tasks', { count: totalCount }) }}</span>
     </div>
   </div>
 </template>

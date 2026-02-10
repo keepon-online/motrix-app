@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
 import { useAppStore } from '@/stores/app'
 import { ElMessage } from 'element-plus'
 
+const { t } = useI18n()
 const taskStore = useTaskStore()
 const appStore = useAppStore()
 const isDragging = ref(false)
@@ -31,9 +33,9 @@ async function handleDrop(e: DragEvent) {
           const buffer = await file.arrayBuffer()
           const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)))
           await taskStore.addTorrent(base64, { dir: appStore.downloadDir })
-          ElMessage.success(`Added torrent: ${file.name}`)
+          ElMessage.success(`${t('dialog.addTask')}: ${file.name}`)
         } catch (error) {
-          ElMessage.error(`Failed to add torrent: ${file.name}`)
+          ElMessage.error(`${t('task.error')}: ${file.name}`)
         }
       }
     }
@@ -47,9 +49,9 @@ async function handleDrop(e: DragEvent) {
     if (urls.length > 0) {
       try {
         await taskStore.addUri(urls, { dir: appStore.downloadDir })
-        ElMessage.success(`Added ${urls.length} download(s)`)
+        ElMessage.success(`${t('dialog.addTask')}: ${urls.length}`)
       } catch (error) {
-        ElMessage.error('Failed to add download')
+        ElMessage.error(t('task.error'))
       }
     }
   }
@@ -84,7 +86,7 @@ onUnmounted(() => {
       <div v-if="isDragging" class="drag-overlay">
         <div class="drag-content">
           <el-icon :size="48"><Upload /></el-icon>
-          <p>Drop files or URLs here to download</p>
+          <p>{{ t('dragDrop.hint') }}</p>
         </div>
       </div>
     </Transition>

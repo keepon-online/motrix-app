@@ -74,14 +74,7 @@
   },
   "plugins": {
     "shell": {
-      "open": true,
-      "scope": [
-        {
-          "name": "aria2c",
-          "cmd": "aria2c",
-          "args": true
-        }
-      ]
+      "open": true
     }
   }
 }
