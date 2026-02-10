@@ -1,25 +1,33 @@
-!.gitkeep
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build output
+dist/
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# IDE
 .DS_Store
-.env
 .idea/
 .vs/
 .vscode/
-*.log
-node_modules/
+*.swp
+*.swo
 thumbs.db
 
-# npm package
-.npmrc
+# Logs
+*.log
 npm-debug.log.*
+
+# Environment
+.env
+.env.*
 
 # Eslint Cache
 .eslintcache*
 
-# electron builder
-*.provisionprofile
-build/*.plist
-dist/electron/*
-dist/web/*
-
-# release
-release/*
+# Sidecar binaries (platform-specific, should be downloaded during build)
+src-tauri/binaries/aria2c-*
