@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
 import { formatBytes, formatSpeed, formatDuration, calcProgress, calcRemainingTime, getTaskName, isBtTask } from '@/utils'
 import TaskFiles from './TaskFiles.vue'
@@ -7,6 +8,7 @@ import TaskPeers from './TaskPeers.vue'
 import TaskTrackers from './TaskTrackers.vue'
 import TaskActivity from './TaskActivity.vue'
 
+const { t } = useI18n()
 const taskStore = useTaskStore()
 
 const task = computed(() => taskStore.currentTask)
@@ -52,12 +54,12 @@ const btMode = computed(() => task.value?.bittorrent?.mode || '')
 const statusText = computed(() => {
   if (!task.value) return ''
   const statusMap: Record<string, string> = {
-    active: 'Downloading',
-    waiting: 'Waiting',
-    paused: 'Paused',
-    complete: 'Completed',
-    error: 'Error',
-    removed: 'Removed',
+    active: t('task.downloading'),
+    waiting: t('task.waiting'),
+    paused: t('task.paused'),
+    complete: t('task.completed'),
+    error: t('task.error'),
+    removed: t('task.removed'),
   }
   return statusMap[task.value.status] || task.value.status
 })
@@ -82,7 +84,7 @@ function close() {
 <template>
   <el-drawer
     :model-value="visible"
-    title="Task Details"
+    :title="t('detail.title')"
     direction="rtl"
     size="480px"
     @close="close"
@@ -108,55 +110,55 @@ function close() {
         <div class="detail-section">
           <div class="stats-grid">
             <div class="stat-item">
-              <span class="stat-label">Size</span>
+              <span class="stat-label">{{ t('detail.size') }}</span>
               <span class="stat-value">{{ completedSize }} / {{ totalSize }}</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">Progress</span>
+              <span class="stat-label">{{ t('detail.progress') }}</span>
               <span class="stat-value">{{ progress }}%</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">Download Speed</span>
+              <span class="stat-label">{{ t('detail.downloadSpeed') }}</span>
               <span class="stat-value">{{ downloadSpeed }}</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">Upload Speed</span>
+              <span class="stat-label">{{ t('detail.uploadSpeed') }}</span>
               <span class="stat-value">{{ uploadSpeed }}</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">Uploaded</span>
+              <span class="stat-label">{{ t('detail.uploaded') }}</span>
               <span class="stat-value">{{ uploadedSize }}</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">Connections</span>
+              <span class="stat-label">{{ t('detail.connections') }}</span>
               <span class="stat-value">{{ connections }}</span>
             </div>
             <div class="stat-item" v-if="isBT">
-              <span class="stat-label">Seeders</span>
+              <span class="stat-label">{{ t('detail.seeders') }}</span>
               <span class="stat-value">{{ seeders }}</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">ETA</span>
+              <span class="stat-label">{{ t('detail.eta') }}</span>
               <span class="stat-value">{{ remainingTime }}</span>
             </div>
             <div class="stat-item full-width" v-if="taskUrl">
-              <span class="stat-label">URL</span>
+              <span class="stat-label">{{ t('detail.url') }}</span>
               <span class="stat-value path">{{ taskUrl }}</span>
             </div>
             <div class="stat-item full-width">
-              <span class="stat-label">Save Path</span>
+              <span class="stat-label">{{ t('detail.savePath') }}</span>
               <span class="stat-value path">{{ task.dir }}</span>
             </div>
             <div class="stat-item" v-if="btMode">
-              <span class="stat-label">BT Mode</span>
+              <span class="stat-label">{{ t('detail.btMode') }}</span>
               <span class="stat-value">{{ btMode }}</span>
             </div>
             <div class="stat-item" v-if="btCreationDate">
-              <span class="stat-label">Created</span>
+              <span class="stat-label">{{ t('detail.created') }}</span>
               <span class="stat-value">{{ btCreationDate }}</span>
             </div>
             <div class="stat-item full-width" v-if="btComment">
-              <span class="stat-label">Comment</span>
+              <span class="stat-label">{{ t('detail.comment') }}</span>
               <span class="stat-value path">{{ btComment }}</span>
             </div>
           </div>
@@ -164,16 +166,16 @@ function close() {
 
         <!-- Tabs -->
         <el-tabs class="detail-tabs">
-          <el-tab-pane label="Activity" v-if="task.status === 'active'">
+          <el-tab-pane :label="t('detail.activity')" v-if="task.status === 'active'">
             <TaskActivity :download-speed="task.downloadSpeed" :upload-speed="task.uploadSpeed" />
           </el-tab-pane>
-          <el-tab-pane label="Files">
+          <el-tab-pane :label="t('detail.files')">
             <TaskFiles :files="task.files" />
           </el-tab-pane>
-          <el-tab-pane v-if="isBT" label="Peers">
+          <el-tab-pane v-if="isBT" :label="t('detail.peers')">
             <TaskPeers :gid="task.gid" />
           </el-tab-pane>
-          <el-tab-pane v-if="isBT" label="Trackers">
+          <el-tab-pane v-if="isBT" :label="t('detail.trackers')">
             <TaskTrackers :task="task" />
           </el-tab-pane>
         </el-tabs>
@@ -181,7 +183,7 @@ function close() {
         <!-- Error Message -->
         <div v-if="task.status === 'error' && task.errorMessage" class="detail-section error-section">
           <el-alert
-            :title="'Error: ' + task.errorCode"
+            :title="t('detail.error') + ': ' + task.errorCode"
             :description="task.errorMessage"
             type="error"
             :closable="false"

@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
 import { formatSpeed } from '@/utils'
 
+const { t } = useI18n()
 const route = useRoute()
 const taskStore = useTaskStore()
 
-const menuItems = [
-  { path: '/tasks/active', icon: 'Download', label: 'Downloads' },
-  { path: '/tasks/waiting', icon: 'Clock', label: 'Waiting' },
-  { path: '/tasks/stopped', icon: 'Finished', label: 'Completed' },
-]
+const menuItems = computed(() => [
+  { path: '/tasks/active', icon: 'Download', label: t('nav.downloads') },
+  { path: '/tasks/waiting', icon: 'Clock', label: t('nav.waiting') },
+  { path: '/tasks/stopped', icon: 'Finished', label: t('nav.completed') },
+])
 
 const isActive = (path: string) => {
   return route.path === path

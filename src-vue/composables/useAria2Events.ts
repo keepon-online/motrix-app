@@ -1,4 +1,5 @@
 import { onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { useTaskStore } from '@/stores/task'
 import { ElNotification } from 'element-plus'
@@ -9,6 +10,7 @@ export interface Aria2Event {
 }
 
 export function useAria2Events() {
+  const { t } = useI18n()
   const taskStore = useTaskStore()
   let unlisten: UnlistenFn | null = null
 
@@ -27,41 +29,35 @@ export function useAria2Events() {
 
     switch (event.eventType) {
       case 'download_start':
-        // Refresh task list to show new task
         taskStore.fetchTasks('active')
         break
 
       case 'download_pause':
-        // Update task status
         taskStore.fetchTasks('active')
         break
 
       case 'download_stop':
-        // Task was stopped/removed
         taskStore.fetchTasks('active')
         taskStore.fetchTasks('stopped')
         break
 
       case 'download_complete':
       case 'bt_download_complete':
-        // Show success notification
         ElNotification({
-          title: 'Download Complete',
-          message: `Task ${event.gid} has finished downloading`,
+          title: t('task.completed'),
+          message: `${t('task.completed')} - ${event.gid}`,
           type: 'success',
           duration: 5000,
         })
-        // Refresh both lists
         taskStore.fetchTasks('active')
         taskStore.fetchTasks('stopped')
         taskStore.fetchGlobalStat()
         break
 
       case 'download_error':
-        // Show error notification
         ElNotification({
-          title: 'Download Error',
-          message: `Task ${event.gid} encountered an error`,
+          title: t('task.error'),
+          message: `${t('task.error')} - ${event.gid}`,
           type: 'error',
           duration: 8000,
         })

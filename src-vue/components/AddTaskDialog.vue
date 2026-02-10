@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
 import { useAppStore } from '@/stores/app'
 import { open } from '@tauri-apps/plugin-dialog'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
 
+const { t } = useI18n()
 const visible = defineModel<boolean>({ default: false })
 
 const taskStore = useTaskStore()
@@ -135,26 +137,26 @@ function handleClose() {
 <template>
   <el-dialog
     v-model="visible"
-    title="Add Task"
+    :title="t('dialog.addTask')"
     width="560px"
     :close-on-click-modal="false"
     @closed="handleClose"
   >
     <el-tabs v-model="activeTab">
-      <el-tab-pane label="URL" name="uri">
+      <el-tab-pane :label="t('dialog.url')" name="uri">
         <el-input
           v-model="uriInput"
           type="textarea"
           :rows="5"
-          placeholder="Enter download URLs (one per line)&#10;Supports HTTP, HTTPS, FTP, Magnet links"
+          :placeholder="t('dialog.urlPlaceholder')"
         />
       </el-tab-pane>
 
-      <el-tab-pane label="Torrent" name="torrent">
+      <el-tab-pane :label="t('dialog.torrent')" name="torrent">
         <div class="torrent-upload">
           <el-button @click="selectTorrent">
             <el-icon><Upload /></el-icon>
-            Select Torrent File
+            {{ t('dialog.selectTorrent') }}
           </el-button>
           <span v-if="torrentFileName" class="torrent-name">{{ torrentFileName }}</span>
         </div>
@@ -164,7 +166,7 @@ function handleClose() {
     <el-divider />
 
     <el-form label-width="140px" label-position="left">
-      <el-form-item label="Download Directory">
+      <el-form-item :label="t('dialog.downloadDir')">
         <el-input v-model="downloadDir" readonly>
           <template #append>
             <el-button @click="selectDirectory">
@@ -174,15 +176,15 @@ function handleClose() {
         </el-input>
       </el-form-item>
 
-      <el-form-item label="File Name" v-if="activeTab === 'uri'">
-        <el-input v-model="fileName" placeholder="Optional, rename downloaded file" />
+      <el-form-item :label="t('dialog.fileName')" v-if="activeTab === 'uri'">
+        <el-input v-model="fileName" :placeholder="t('dialog.fileNamePlaceholder')" />
       </el-form-item>
 
-      <el-form-item label="Split">
+      <el-form-item :label="t('dialog.split')">
         <el-slider v-model="split" :min="1" :max="64" :step="1" show-input />
       </el-form-item>
 
-      <el-form-item label="Connections">
+      <el-form-item :label="t('dialog.connections')">
         <el-slider v-model="maxConnectionPerServer" :min="1" :max="64" :step="1" show-input />
       </el-form-item>
 
@@ -192,32 +194,32 @@ function handleClose() {
           <ArrowRight v-if="!showAdvanced" />
           <ArrowDown v-else />
         </el-icon>
-        <span>Advanced Options</span>
+        <span>{{ t('dialog.advancedOptions') }}</span>
       </div>
 
       <template v-if="showAdvanced">
         <el-form-item label="User-Agent">
-          <el-input v-model="userAgent" placeholder="Custom User-Agent header" />
+          <el-input v-model="userAgent" :placeholder="t('dialog.userAgentPlaceholder')" />
         </el-form-item>
 
-        <el-form-item label="Referer">
-          <el-input v-model="referer" placeholder="Custom Referer header" />
+        <el-form-item :label="t('dialog.referer')">
+          <el-input v-model="referer" :placeholder="t('dialog.refererPlaceholder')" />
         </el-form-item>
 
-        <el-form-item label="Cookie">
-          <el-input v-model="cookie" placeholder="Custom Cookie value" />
+        <el-form-item :label="t('dialog.cookie')">
+          <el-input v-model="cookie" :placeholder="t('dialog.cookiePlaceholder')" />
         </el-form-item>
 
-        <el-form-item label="Authorization">
-          <el-input v-model="authorization" placeholder="e.g. Bearer token123" />
+        <el-form-item :label="t('dialog.authorization')">
+          <el-input v-model="authorization" :placeholder="t('dialog.authorizationPlaceholder')" />
         </el-form-item>
       </template>
     </el-form>
 
     <template #footer>
-      <el-button @click="visible = false">Cancel</el-button>
+      <el-button @click="visible = false">{{ t('dialog.cancel') }}</el-button>
       <el-button type="primary" :disabled="!canSubmit" @click="submit">
-        Add
+        {{ t('dialog.add') }}
       </el-button>
     </template>
   </el-dialog>

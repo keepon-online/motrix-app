@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { open } from '@tauri-apps/plugin-shell'
+
+const { t } = useI18n()
 </script>
 
 <template>
@@ -8,12 +11,12 @@ import { open } from '@tauri-apps/plugin-shell'
       <img src="@/assets/logo.svg" alt="Motrix" />
     </div>
 
-    <h1 class="about-title">Motrix</h1>
-    <p class="about-version">Version 2.0.0</p>
-    <p class="about-description">A full-featured download manager</p>
+    <h1 class="about-title">{{ t('app.name') }}</h1>
+    <p class="about-version">{{ t('app.version') }}</p>
+    <p class="about-description">{{ t('app.description') }}</p>
 
     <div class="about-tech">
-      <p>Built with</p>
+      <p>{{ t('app.builtWith') }}</p>
       <div class="tech-stack">
         <el-tag>Tauri 2.0</el-tag>
         <el-tag>Vue 3</el-tag>
@@ -26,21 +29,21 @@ import { open } from '@tauri-apps/plugin-shell'
     <div class="about-links">
       <el-button text @click="open('https://motrix.app')">
         <el-icon><Link /></el-icon>
-        Website
+        {{ t('about.website') }}
       </el-button>
       <el-button text @click="open('https://github.com/agalwood/Motrix')">
         <el-icon><Link /></el-icon>
-        GitHub
+        {{ t('about.github') }}
       </el-button>
       <el-button text @click="open('https://github.com/agalwood/Motrix/releases')">
         <el-icon><Link /></el-icon>
-        Releases
+        {{ t('about.releases') }}
       </el-button>
     </div>
 
     <div class="about-copyright">
-      <p>Copyright © 2018-2026 Dr_rOot</p>
-      <p>MIT License</p>
+      <p>{{ t('app.copyright') }}</p>
+      <p>{{ t('app.license') }}</p>
     </div>
   </div>
 </template>

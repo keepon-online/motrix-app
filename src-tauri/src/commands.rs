@@ -3,6 +3,7 @@
 use crate::aria2;
 use crate::config::AppConfig;
 use crate::error::Error;
+use crate::tray::TrayLabels;
 use crate::Result;
 use serde_json::Value;
 use tauri_plugin_store::StoreExt;
@@ -227,4 +228,51 @@ pub async fn get_task_peers(gid: String) -> Result<Value> {
 pub async fn change_task_option(gid: String, options: Value) -> Result<Value> {
     let client = aria2::get_client().await?;
     client.change_option(&gid, options).await
+}
+
+/// Fetch tracker lists from remote sources
+#[tauri::command]
+pub async fn fetch_tracker_list(sources: Vec<String>) -> Result<Vec<String>> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| Error::Custom(format!("Failed to create HTTP client: {}", e)))?;
+
+    let mut all_trackers = Vec::new();
+
+    for source in &sources {
+        match client.get(source).send().await {
+            Ok(response) => {
+                if response.status().is_success() {
+                    if let Ok(text) = response.text().await {
+                        let trackers: Vec<String> = text
+                            .lines()
+                            .map(|line| line.trim().to_string())
+                            .filter(|line| !line.is_empty())
+                            .collect();
+                        all_trackers.extend(trackers);
+                    }
+                } else {
+                    tracing::warn!("Failed to fetch tracker source {}: HTTP {}", source, response.status());
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to fetch tracker source {}: {}", source, e);
+            }
+        }
+    }
+
+    // Deduplicate
+    let mut seen = std::collections::HashSet::new();
+    all_trackers.retain(|t| seen.insert(t.clone()));
+
+    Ok(all_trackers)
+}
+
+/// Update tray menu labels for i18n
+#[tauri::command]
+pub async fn update_tray_menu(app: tauri::AppHandle, labels: TrayLabels) -> Result<()> {
+    crate::tray::update_tray_labels(&app, &labels)
+        .map_err(|e| Error::Custom(format!("Failed to update tray menu: {}", e)))?;
+    Ok(())
 }

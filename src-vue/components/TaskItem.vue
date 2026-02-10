@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import type { Task } from '@/types'
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { ElMessage } from 'element-plus'
 import { formatBytes, formatSpeed, formatDuration, calcProgress, calcRemainingTime, getTaskName } from '@/utils'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   task: Task
@@ -41,12 +44,12 @@ const statusClass = computed(() => {
 
 const statusText = computed(() => {
   const statusMap: Record<string, string> = {
-    active: 'Downloading',
-    waiting: 'Waiting',
-    paused: 'Paused',
-    complete: 'Completed',
-    error: 'Error',
-    removed: 'Removed',
+    active: t('task.downloading'),
+    waiting: t('task.waiting'),
+    paused: t('task.paused'),
+    complete: t('task.completed'),
+    error: t('task.error'),
+    removed: t('task.removed'),
   }
   return statusMap[props.task.status] || props.task.status
 })
@@ -71,7 +74,7 @@ async function openFile() {
   try {
     await invoke('open_file', { path: firstFilePath.value })
   } catch (error) {
-    ElMessage.error('Failed to open file')
+    ElMessage.error(t('task.failedOpenFile'))
   }
 }
 
@@ -81,7 +84,7 @@ async function showInFolder() {
   try {
     await invoke('show_in_folder', { path })
   } catch (error) {
-    ElMessage.error('Failed to open folder')
+    ElMessage.error(t('task.failedOpenFolder'))
   }
 }
 
@@ -89,9 +92,9 @@ async function copyLink() {
   if (!taskUrl.value) return
   try {
     await writeText(taskUrl.value)
-    ElMessage.success('Link copied')
+    ElMessage.success(t('task.linkCopied'))
   } catch (error) {
-    ElMessage.error('Failed to copy link')
+    ElMessage.error(t('task.failedCopyLink'))
   }
 }
 </script>
@@ -132,7 +135,7 @@ async function copyLink() {
         circle
         size="small"
         @click="openFile"
-        title="Open File"
+        :title="t('task.openFile')"
       >
         <el-icon><Document /></el-icon>
       </el-button>
@@ -141,7 +144,7 @@ async function copyLink() {
         circle
         size="small"
         @click="showInFolder"
-        title="Show in Folder"
+        :title="t('task.showInFolder')"
       >
         <el-icon><FolderOpened /></el-icon>
       </el-button>
@@ -150,7 +153,7 @@ async function copyLink() {
         circle
         size="small"
         @click="copyLink"
-        title="Copy Link"
+        :title="t('task.copyLink')"
       >
         <el-icon><CopyDocument /></el-icon>
       </el-button>
@@ -159,7 +162,7 @@ async function copyLink() {
         circle
         size="small"
         @click="emit('pause')"
-        title="Pause"
+        :title="t('task.pause')"
       >
         <el-icon><VideoPause /></el-icon>
       </el-button>
@@ -169,7 +172,7 @@ async function copyLink() {
         size="small"
         type="primary"
         @click="emit('resume')"
-        title="Resume"
+        :title="t('task.resume')"
       >
         <el-icon><VideoPlay /></el-icon>
       </el-button>
@@ -178,7 +181,7 @@ async function copyLink() {
         size="small"
         type="danger"
         @click="emit('remove')"
-        title="Remove"
+        :title="t('task.remove')"
       >
         <el-icon><Delete /></el-icon>
       </el-button>

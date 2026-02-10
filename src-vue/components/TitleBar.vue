@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useAppStore } from '@/stores/app'
 
+const { t } = useI18n()
 const appWindow = getCurrentWindow()
 const appStore = useAppStore()
 const isMaximized = ref(false)
@@ -44,16 +46,16 @@ appWindow.isMaximized().then((maximized) => {
     </div>
 
     <div class="title-bar-right">
-      <button class="title-bar-btn" @click="minimize" title="Minimize">
+      <button class="title-bar-btn" @click="minimize" :title="t('titleBar.minimize')">
         <el-icon><Minus /></el-icon>
       </button>
-      <button class="title-bar-btn" @click="toggleMaximize" :title="isMaximized ? 'Restore' : 'Maximize'">
+      <button class="title-bar-btn" @click="toggleMaximize" :title="isMaximized ? t('titleBar.restore') : t('titleBar.maximize')">
         <el-icon>
           <FullScreen v-if="!isMaximized" />
           <CopyDocument v-else />
         </el-icon>
       </button>
-      <button class="title-bar-btn close" @click="close" title="Close">
+      <button class="title-bar-btn close" @click="close" :title="t('titleBar.close')">
         <el-icon><Close /></el-icon>
       </button>
     </div>

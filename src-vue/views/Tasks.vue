@@ -1,18 +1,27 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
 import TaskItem from '@/components/TaskItem.vue'
 import TaskToolbar from '@/components/TaskToolbar.vue'
 import TaskDetail from '@/components/TaskDetail.vue'
 import AddTaskDialog from '@/components/AddTaskDialog.vue'
 
+const { t } = useI18n()
 const route = useRoute()
 const taskStore = useTaskStore()
 
 const addDialogVisible = ref(false)
 let refreshInterval: number | null = null
 let currentInterval = 1000
+
+const pageTitle = computed(() => {
+  const status = route.params.status as string
+  if (status === 'stopped') return t('nav.completed')
+  if (status === 'waiting') return t('nav.waiting')
+  return t('nav.downloads')
+})
 
 // Fetch tasks based on route
 const fetchTasks = () => {
@@ -97,7 +106,7 @@ onUnmounted(() => {
   <div class="tasks-view">
     <header class="tasks-header">
       <h2 class="tasks-title">
-        {{ route.params.status === 'stopped' ? 'Completed' : route.params.status === 'waiting' ? 'Waiting' : 'Downloads' }}
+        {{ pageTitle }}
       </h2>
       <div class="tasks-actions">
         <el-button
@@ -105,19 +114,20 @@ onUnmounted(() => {
           @click="taskStore.purgeTaskRecords()"
         >
           <el-icon><Delete /></el-icon>
-          Clear Records
+          {{ t('task.clearRecords') }}
         </el-button>
         <el-button type="primary" @click="addDialogVisible = true">
           <el-icon><Plus /></el-icon>
-          Add Task
+          {{ t('task.add') }}
         </el-button>
       </div>
     </header>
 
     <TaskToolbar v-if="taskStore.tasks.length > 0" />
 
-    <div class="tasks-list" v-loading="taskStore.loading">
-      <template v-if="taskStore.tasks.length > 0">
+    <div class="tasks-list">
+      <div v-if="taskStore.loading" class="tasks-loading" v-loading="true" />
+      <template v-else-if="taskStore.tasks.length > 0">
         <TaskItem
           v-for="task in taskStore.tasks"
           :key="task.gid"
@@ -131,9 +141,9 @@ onUnmounted(() => {
           @show-detail="taskStore.showTaskDetail(task)"
         />
       </template>
-      <el-empty v-else description="No tasks" :image-size="120">
+      <el-empty v-else :description="t('task.noTasks')" :image-size="120">
         <el-button type="primary" @click="addDialogVisible = true">
-          Add your first task
+          {{ t('task.addFirst') }}
         </el-button>
       </el-empty>
     </div>
@@ -167,5 +177,9 @@ onUnmounted(() => {
 .tasks-list {
   flex: 1;
   overflow-y: auto;
+}
+
+.tasks-loading {
+  height: 200px;
 }
 </style>

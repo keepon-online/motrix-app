@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { AppConfig } from '@/types'
 import { invoke } from '@tauri-apps/api/core'
+import { i18n } from '@/main'
 
 export const useAppStore = defineStore('app', () => {
   // State
@@ -22,6 +23,22 @@ export const useAppStore = defineStore('app', () => {
   const downloadDir = computed(() => config.value?.downloadDir ?? '')
 
   // Actions
+  async function updateTrayMenu() {
+    const t = i18n.global.t
+    try {
+      await invoke('update_tray_menu', {
+        labels: {
+          show: t('tray.show'),
+          pauseAll: t('tray.pauseAll'),
+          resumeAll: t('tray.resumeAll'),
+          quit: t('tray.quit'),
+        }
+      })
+    } catch (e) {
+      console.warn('Failed to update tray menu:', e)
+    }
+  }
+
   async function init() {
     if (initialized.value) return
 
@@ -29,6 +46,12 @@ export const useAppStore = defineStore('app', () => {
     try {
       config.value = await invoke<AppConfig>('get_app_config')
       initialized.value = true
+      // Restore saved locale to i18n
+      if (config.value.locale) {
+        ;(i18n.global.locale as unknown as { value: string }).value = config.value.locale
+      }
+      // Update tray menu with current locale
+      await updateTrayMenu()
     } catch (error) {
       console.error('Failed to load config:', error)
       // Use default config
@@ -80,12 +103,27 @@ export const useAppStore = defineStore('app', () => {
     await saveConfig({ theme })
   }
 
-  async function setLocale(locale: string) {
-    await saveConfig({ locale })
+  async function setLocale(newLocale: string) {
+    ;(i18n.global.locale as unknown as { value: string }).value = newLocale
+    await saveConfig({ locale: newLocale })
+    await updateTrayMenu()
   }
 
   async function setDownloadDir(dir: string) {
     await saveConfig({ downloadDir: dir })
+  }
+
+  async function resetConfig() {
+    const defaults = getDefaultConfig()
+    // Keep locale as current
+    defaults.locale = config.value?.locale ?? 'en'
+    try {
+      await invoke('save_app_config', { config: defaults })
+      config.value = defaults
+    } catch (error) {
+      console.error('Failed to reset config:', error)
+      throw error
+    }
   }
 
   function getDefaultConfig(): AppConfig {
@@ -138,5 +176,6 @@ export const useAppStore = defineStore('app', () => {
     setTheme,
     setLocale,
     setDownloadDir,
+    resetConfig,
   }
 })

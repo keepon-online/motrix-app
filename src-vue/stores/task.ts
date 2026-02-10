@@ -13,7 +13,8 @@ export const useTaskStore = defineStore('task', () => {
   const currentTask = ref<Task | null>(null)
   const detailVisible = ref(false)
   const globalStat = ref<GlobalStat | null>(null)
-  const loading = ref(false)
+  const loading = ref(true)
+  const fetchCount = ref(0)
 
   // Getters
   const activeTasks = computed(() =>
@@ -35,7 +36,6 @@ export const useTaskStore = defineStore('task', () => {
   // Actions
   async function fetchTasks(type?: TaskListType) {
     const listType = type ?? currentListType.value
-    loading.value = true
 
     try {
       const result = await invoke<Task[]>('get_task_list', { taskType: listType })
@@ -48,7 +48,10 @@ export const useTaskStore = defineStore('task', () => {
     } catch (error) {
       console.error('Failed to fetch tasks:', error)
     } finally {
-      loading.value = false
+      fetchCount.value++
+      if (loading.value) {
+        loading.value = false
+      }
     }
   }
 

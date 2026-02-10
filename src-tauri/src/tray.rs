@@ -1,11 +1,22 @@
 //! System tray management
 
 use crate::aria2;
+use serde::Deserialize;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, Runtime,
 };
+
+/// Tray menu labels for i18n
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrayLabels {
+    pub show: String,
+    pub pause_all: String,
+    pub resume_all: String,
+    pub quit: String,
+}
 
 pub fn create_tray<R: Runtime>(app: &tauri::App<R>) -> Result<(), tauri::Error> {
     let show_i = MenuItem::with_id(app, "show", "Show Motrix", true, None::<&str>)?;
@@ -15,7 +26,7 @@ pub fn create_tray<R: Runtime>(app: &tauri::App<R>) -> Result<(), tauri::Error> 
 
     let menu = Menu::with_items(app, &[&show_i, &pause_all_i, &resume_all_i, &quit_i])?;
 
-    let _tray = TrayIconBuilder::new()
+    let _tray = TrayIconBuilder::with_id("main")
         .icon(app.default_window_icon().unwrap().clone())
         .menu(&menu)
         .show_menu_on_left_click(false)
@@ -84,5 +95,20 @@ pub fn create_tray<R: Runtime>(app: &tauri::App<R>) -> Result<(), tauri::Error> 
         })
         .build(app)?;
 
+    Ok(())
+}
+
+/// Update tray menu labels (called from frontend on locale change)
+pub fn update_tray_labels<R: Runtime>(app: &tauri::AppHandle<R>, labels: &TrayLabels) -> Result<(), tauri::Error> {
+    if let Some(tray) = app.tray_by_id("main") {
+        // Rebuild menu with updated labels
+        let show_i = MenuItem::with_id(app, "show", &labels.show, true, None::<&str>)?;
+        let pause_all_i = MenuItem::with_id(app, "pause_all", &labels.pause_all, true, None::<&str>)?;
+        let resume_all_i = MenuItem::with_id(app, "resume_all", &labels.resume_all, true, None::<&str>)?;
+        let quit_i = MenuItem::with_id(app, "quit", &labels.quit, true, None::<&str>)?;
+
+        let menu = Menu::with_items(app, &[&show_i, &pause_all_i, &resume_all_i, &quit_i])?;
+        tray.set_menu(Some(menu))?;
+    }
     Ok(())
 }
