@@ -5,6 +5,7 @@ import { useTaskStore } from '@/stores/task'
 import { useAppStore } from '@/stores/app'
 import { open } from '@tauri-apps/plugin-dialog'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
+import { ElMessage } from 'element-plus'
 
 const { t } = useI18n()
 const visible = defineModel<boolean>({ default: false })
@@ -83,9 +84,13 @@ async function selectDirectory() {
 
 async function submit() {
   const options: Record<string, unknown> = {
-    dir: downloadDir.value,
-    split: split.value,
-    'max-connection-per-server': maxConnectionPerServer.value,
+    split: String(split.value),
+    'max-connection-per-server': String(maxConnectionPerServer.value),
+  }
+
+  // Only set dir if non-empty
+  if (downloadDir.value) {
+    options.dir = downloadDir.value
   }
 
   // Advanced options
@@ -105,7 +110,12 @@ async function submit() {
         .split('\n')
         .map((u) => u.trim())
         .filter((u) => u.length > 0)
-      await taskStore.addUri(uris, options)
+
+      if (uris.length === 0) return
+
+      for (const uri of uris) {
+        await taskStore.addUri([uri], options)
+      }
     } else if (torrentFile.value) {
       await taskStore.addTorrent(torrentFile.value, options)
     }
@@ -114,6 +124,7 @@ async function submit() {
     visible.value = false
   } catch (error) {
     console.error('Failed to add task:', error)
+    ElMessage.error(String(error))
   }
 }
 
