@@ -3,7 +3,7 @@
  */
 export function formatBytes(bytes: number | string, decimals = 2): string {
   const b = typeof bytes === 'string' ? parseInt(bytes) : bytes
-  if (b === 0) return '0 B'
+  if (!isFinite(b) || b <= 0) return '0 B'
 
   const k = 1024
   const dm = decimals < 0 ? 0 : decimals

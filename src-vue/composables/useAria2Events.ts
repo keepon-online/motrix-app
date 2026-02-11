@@ -5,26 +5,11 @@ import { invoke } from '@tauri-apps/api/core'
 import { useTaskStore } from '@/stores/task'
 import { useAppStore } from '@/stores/app'
 import { ElNotification } from 'element-plus'
+import { getTaskName } from '@/utils'
 
 export interface Aria2Event {
   eventType: 'download_start' | 'download_pause' | 'download_stop' | 'download_complete' | 'download_error' | 'bt_download_complete'
   gid: string
-}
-
-function getTaskName(taskInfo: Record<string, unknown>): string {
-  // Try bittorrent info name first
-  const bt = taskInfo.bittorrent as Record<string, unknown> | undefined
-  if (bt?.info) {
-    const info = bt.info as Record<string, unknown>
-    if (info.name) return String(info.name)
-  }
-  // Try first file path
-  const files = taskInfo.files as Array<Record<string, unknown>> | undefined
-  if (files?.[0]?.path) {
-    const path = String(files[0].path)
-    return path.split('/').pop()?.split('\\').pop() || path
-  }
-  return taskInfo.gid as string || ''
 }
 
 export function useAria2Events() {
@@ -32,6 +17,22 @@ export function useAria2Events() {
   const taskStore = useTaskStore()
   const appStore = useAppStore()
   let unlisten: UnlistenFn | null = null
+
+  async function sendSystemNotification(title: string, body: string) {
+    try {
+      const { sendNotification, isPermissionGranted, requestPermission } = await import('@tauri-apps/plugin-notification')
+      let granted = await isPermissionGranted()
+      if (!granted) {
+        const permission = await requestPermission()
+        granted = permission === 'granted'
+      }
+      if (granted) {
+        sendNotification({ title, body })
+      }
+    } catch {
+      // Notification plugin may not be available
+    }
+  }
 
   async function setupEventListener() {
     try {
@@ -44,8 +45,6 @@ export function useAria2Events() {
   }
 
   async function handleAria2Event(event: Aria2Event) {
-    console.log('Aria2 event received:', event)
-
     switch (event.eventType) {
       case 'download_start':
         taskStore.fetchTasks('active')
@@ -65,20 +64,12 @@ export function useAria2Events() {
         if (appStore.config?.notifyOnComplete) {
           try {
             const info = await invoke<Record<string, unknown>>('get_task_info', { gid: event.gid })
-            const name = getTaskName(info)
-            ElNotification({
-              title: t('task.completed'),
-              message: name,
-              type: 'success',
-              duration: 5000,
-            })
+            const name = getTaskName(info as { files?: { path?: string }[]; bittorrent?: { info?: { name?: string } } })
+            sendSystemNotification(t('task.completed'), name)
+            ElNotification({ title: t('task.completed'), message: name, type: 'success', duration: 5000 })
           } catch {
-            ElNotification({
-              title: t('task.completed'),
-              message: event.gid,
-              type: 'success',
-              duration: 5000,
-            })
+            sendSystemNotification(t('task.completed'), event.gid)
+            ElNotification({ title: t('task.completed'), message: event.gid, type: 'success', duration: 5000 })
           }
         }
         taskStore.fetchTasks('active')
@@ -93,21 +84,13 @@ export function useAria2Events() {
       case 'download_error':
         try {
           const info = await invoke<Record<string, unknown>>('get_task_info', { gid: event.gid })
-          const name = getTaskName(info)
+          const name = getTaskName(info as { files?: { path?: string }[]; bittorrent?: { info?: { name?: string } } })
           const errorMsg = info.errorMessage ? `: ${info.errorMessage}` : ''
-          ElNotification({
-            title: t('task.error'),
-            message: `${name}${errorMsg}`,
-            type: 'error',
-            duration: 8000,
-          })
+          sendSystemNotification(t('task.error'), `${name}${errorMsg}`)
+          ElNotification({ title: t('task.error'), message: `${name}${errorMsg}`, type: 'error', duration: 8000 })
         } catch {
-          ElNotification({
-            title: t('task.error'),
-            message: event.gid,
-            type: 'error',
-            duration: 8000,
-          })
+          sendSystemNotification(t('task.error'), event.gid)
+          ElNotification({ title: t('task.error'), message: event.gid, type: 'error', duration: 8000 })
         }
         taskStore.fetchTasks('active')
         taskStore.fetchTasks('stopped')

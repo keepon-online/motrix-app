@@ -2,7 +2,7 @@ export default {
   app: {
     name: 'Motrix',
     description: '全功能下载管理器',
-    version: '版本 2.0.0',
+    version: '版本 {version}',
     builtWith: '基于以下技术构建',
     copyright: 'Copyright © 2018-2026 Dr_rOot',
     license: 'MIT 开源协议',

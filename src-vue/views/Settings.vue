@@ -158,8 +158,18 @@ async function importConfig() {
     if (filePath) {
       const { readTextFile } = await import('@tauri-apps/plugin-fs')
       const text = await readTextFile(filePath as string)
-      const config = JSON.parse(text)
-      await appStore.saveConfig(config)
+      const parsed = JSON.parse(text)
+      // Validate required fields exist and have correct types
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        throw new Error('Invalid config format')
+      }
+      const requiredStrings = ['locale', 'theme', 'downloadDir']
+      for (const key of requiredStrings) {
+        if (key in parsed && typeof parsed[key] !== 'string') {
+          throw new Error(`Invalid type for ${key}`)
+        }
+      }
+      await appStore.saveConfig(parsed)
       ElMessage.success(t('settings.importSuccess'))
     }
   } catch (e) {
@@ -191,7 +201,7 @@ async function importConfig() {
         <h3 class="settings-section">{{ t('settings.basic') }}</h3>
 
         <el-form-item :label="t('settings.theme')">
-          <el-radio-group :model-value="appStore.config?.theme" @change="(val: any) => setTheme(val as 'auto' | 'light' | 'dark')">
+          <el-radio-group :model-value="appStore.config?.theme" @change="(val: string | number | boolean | undefined) => val && setTheme(val as 'auto' | 'light' | 'dark')">
             <el-radio-button value="auto">{{ t('settings.themeAuto') }}</el-radio-button>
             <el-radio-button value="light">{{ t('settings.themeLight') }}</el-radio-button>
             <el-radio-button value="dark">{{ t('settings.themeDark') }}</el-radio-button>

@@ -154,11 +154,10 @@ impl AppConfig {
             "--rpc-allow-origin-all=true".to_string(),
             "--enable-dht=true".to_string(),
             "--enable-dht6=true".to_string(),
-            format!("--enable-peer-exchange=true"),
-            format!("--bt-enable-lpd=true"),
-            // Note: --enable-upnp is not supported in this aria2c build
+            "--enable-peer-exchange=true".to_string(),
+            "--bt-enable-lpd=true".to_string(),
             "--follow-torrent=false".to_string(),
-            "--check-certificate=false".to_string(),
+            "--check-certificate=true".to_string(),
             format!("--max-overall-download-limit={}", self.max_overall_download_limit),
             format!("--max-overall-upload-limit={}", self.max_overall_upload_limit),
             format!("--allow-overwrite={}", self.allow_overwrite),
@@ -182,9 +181,7 @@ impl AppConfig {
             if !self.proxy_username.is_empty() {
                 args.push(format!("--all-proxy-user={}", self.proxy_username));
             }
-            if !self.proxy_password.is_empty() {
-                args.push(format!("--all-proxy-passwd={}", self.proxy_password));
-            }
+            // Note: proxy password is passed via conf-path to avoid exposure in process list
             if !self.no_proxy.is_empty() {
                 args.push(format!("--no-proxy={}", self.no_proxy));
             }

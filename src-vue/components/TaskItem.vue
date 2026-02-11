@@ -15,8 +15,11 @@ const contextMenuX = ref(0)
 const contextMenuY = ref(0)
 
 function showContextMenu(e: MouseEvent) {
-  contextMenuX.value = e.clientX
-  contextMenuY.value = e.clientY
+  // Clamp position to prevent overflow
+  const menuWidth = 200
+  const menuHeight = 300
+  contextMenuX.value = Math.min(e.clientX, window.innerWidth - menuWidth)
+  contextMenuY.value = Math.min(e.clientY, window.innerHeight - menuHeight)
   contextMenuVisible.value = true
 }
 

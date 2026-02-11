@@ -46,12 +46,8 @@ struct NotificationParam {
 
 /// Aria2 RPC client
 pub struct Aria2Client {
-    #[allow(dead_code)]
-    port: u16,
     secret: String,
     sender: mpsc::Sender<RpcRequest>,
-    #[allow(dead_code)]
-    app_handle: AppHandle,
 }
 
 struct RpcRequest {
@@ -145,6 +141,19 @@ async fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig)
         format!("--dht-file-path={}", dht_path.display()),
         format!("--dht-file-path6={}", dht6_path.display()),
     ]);
+
+    // Write sensitive options (proxy password) to a conf file to avoid exposure in process list
+    let conf_path = app_data_dir.join("aria2.conf");
+    if config.proxy_enabled && !config.proxy_password.is_empty() {
+        let conf_content = format!("all-proxy-passwd={}\n", config.proxy_password);
+        std::fs::write(&conf_path, conf_content)
+            .map_err(|e| Error::Custom(format!("Failed to write aria2 conf: {}", e)))?;
+        args.push(format!("--conf-path={}", conf_path.display()));
+    } else {
+        // Remove stale conf file and disable default conf
+        let _ = std::fs::remove_file(&conf_path);
+        args.push("--no-conf".to_string());
+    }
 
     // Spawn aria2c process
     let (mut _rx, child) = shell
@@ -270,10 +279,8 @@ impl Aria2Client {
         });
 
         Ok(Self {
-            port,
             secret,
             sender: tx,
-            app_handle,
         })
     }
 

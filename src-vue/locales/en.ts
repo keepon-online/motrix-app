@@ -2,7 +2,7 @@ export default {
   app: {
     name: 'Motrix',
     description: 'A full-featured download manager',
-    version: 'Version 2.0.0',
+    version: 'Version {version}',
     builtWith: 'Built with',
     copyright: 'Copyright © 2018-2026 Dr_rOot',
     license: 'MIT License',

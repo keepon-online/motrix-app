@@ -7,6 +7,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage } from 'element-plus'
+import { formatBytes } from '@/utils'
 
 interface TorrentFileInfo {
   index: number
@@ -85,13 +86,6 @@ watch(visible, async (val) => {
 
 function isUrl(text: string): boolean {
   return /^(https?|ftp|magnet|thunder):\/?\/?\S/i.test(text)
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + units[i]
 }
 
 async function selectTorrent() {
@@ -274,7 +268,7 @@ function handleClose() {
                 @change="toggleFile(file.index)"
               >
                 <span class="file-path">{{ file.path }}</span>
-                <span class="file-size">{{ formatFileSize(file.length) }}</span>
+                <span class="file-size">{{ formatBytes(file.length) }}</span>
               </el-checkbox>
             </div>
           </div>
