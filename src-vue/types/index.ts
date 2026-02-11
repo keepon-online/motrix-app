@@ -96,6 +96,10 @@ export interface AppConfig {
   continueDownload: boolean
   followMetalink: string
   lastTrackerUpdate: number
+  btSaveMetadata: boolean
+  btLoadSavedMetadata: boolean
+  btRemoveUnselectedFile: boolean
+  btDetachSeedOnly: boolean
 }
 
 // Add task options

@@ -36,6 +36,12 @@ pub struct AppConfig {
     pub bt_require_crypto: bool,
     pub pause_metadata: bool,
 
+    // BT advanced settings
+    pub bt_save_metadata: bool,
+    pub bt_load_saved_metadata: bool,
+    pub bt_remove_unselected_file: bool,
+    pub bt_detach_seed_only: bool,
+
     // Advanced settings
     pub user_agent: String,
     pub rpc_port: u16,
@@ -113,6 +119,11 @@ impl Default for AppConfig {
             bt_require_crypto: false,
             pause_metadata: false,
 
+            bt_save_metadata: true,
+            bt_load_saved_metadata: true,
+            bt_remove_unselected_file: false,
+            bt_detach_seed_only: false,
+
             user_agent: format!("Motrix/{}", env!("CARGO_PKG_VERSION")),
             rpc_port: 16800,
             rpc_secret: uuid::Uuid::new_v4().to_string(),
@@ -171,6 +182,10 @@ impl AppConfig {
             format!("--bt-force-encryption={}", self.bt_force_encryption),
             format!("--bt-require-crypto={}", self.bt_require_crypto),
             format!("--pause-metadata={}", self.pause_metadata),
+            format!("--bt-save-metadata={}", self.bt_save_metadata),
+            format!("--bt-load-saved-metadata={}", self.bt_load_saved_metadata),
+            format!("--bt-remove-unselected-file={}", self.bt_remove_unselected_file),
+            format!("--bt-detach-seed-only={}", self.bt_detach_seed_only),
             format!("--follow-metalink={}", self.follow_metalink),
         ];
 

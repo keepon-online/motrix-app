@@ -428,6 +428,34 @@ async function importConfig() {
           />
         </el-form-item>
 
+        <el-form-item :label="t('settings.btSaveMetadata')">
+          <el-switch
+            :model-value="appStore.config?.btSaveMetadata"
+            @change="(val: string | number | boolean) => appStore.saveConfig({ btSaveMetadata: Boolean(val) })"
+          />
+        </el-form-item>
+
+        <el-form-item :label="t('settings.btLoadSavedMetadata')">
+          <el-switch
+            :model-value="appStore.config?.btLoadSavedMetadata"
+            @change="(val: string | number | boolean) => appStore.saveConfig({ btLoadSavedMetadata: Boolean(val) })"
+          />
+        </el-form-item>
+
+        <el-form-item :label="t('settings.btRemoveUnselectedFile')">
+          <el-switch
+            :model-value="appStore.config?.btRemoveUnselectedFile"
+            @change="(val: string | number | boolean) => appStore.saveConfig({ btRemoveUnselectedFile: Boolean(val) })"
+          />
+        </el-form-item>
+
+        <el-form-item :label="t('settings.btDetachSeedOnly')">
+          <el-switch
+            :model-value="appStore.config?.btDetachSeedOnly"
+            @change="(val: string | number | boolean) => appStore.saveConfig({ btDetachSeedOnly: Boolean(val) })"
+          />
+        </el-form-item>
+
         <!-- Proxy Settings -->
         <h3 class="settings-section">{{ t('settings.proxy') }}</h3>
 

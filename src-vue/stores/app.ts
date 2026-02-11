@@ -82,6 +82,10 @@ export const useAppStore = defineStore('app', () => {
         btForceEncryption: 'bt-force-encryption',
         btRequireCrypto: 'bt-require-crypto',
         followMetalink: 'follow-metalink',
+        btSaveMetadata: 'bt-save-metadata',
+        btLoadSavedMetadata: 'bt-load-saved-metadata',
+        btRemoveUnselectedFile: 'bt-remove-unselected-file',
+        btDetachSeedOnly: 'bt-detach-seed-only',
       }
 
       const engineOptions: Record<string, string> = {}
@@ -198,6 +202,10 @@ export const useAppStore = defineStore('app', () => {
       continueDownload: true,
       followMetalink: 'true',
       lastTrackerUpdate: 0,
+      btSaveMetadata: true,
+      btLoadSavedMetadata: true,
+      btRemoveUnselectedFile: false,
+      btDetachSeedOnly: false,
     }
   }
 
