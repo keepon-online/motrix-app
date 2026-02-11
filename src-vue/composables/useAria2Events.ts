@@ -75,11 +75,13 @@ export function useAria2Events() {
           }
         }
         taskStore.fetchTasks('active')
-        taskStore.fetchTasks('stopped')
+        await taskStore.fetchTasks('stopped')
         taskStore.fetchGlobalStat()
-        // Auto clear completed task record if configured
+        // Auto clear completed task record if configured (delay to let UI show it)
         if (appStore.config?.autoClearCompleted) {
-          taskStore.removeTaskRecord(event.gid).catch(() => {})
+          setTimeout(() => {
+            taskStore.removeTaskRecord(event.gid).catch(() => {})
+          }, 3000)
         }
         checkAndAllowSleep()
         break

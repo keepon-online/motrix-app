@@ -113,7 +113,9 @@ impl Default for AppConfig {
             seed_time: 60,
             bt_tracker: String::new(),
             tracker_source: vec![
-                "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt".to_string(),
+                "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all.txt".to_string(),
+                "https://raw.githubusercontent.com/XIU2/TrackersListCollection/master/all.txt".to_string(),
+                "https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_all.txt".to_string(),
             ],
             bt_force_encryption: false,
             bt_require_crypto: false,
