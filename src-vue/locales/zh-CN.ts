@@ -53,6 +53,8 @@ export default {
     speedLimited: '已限速',
     noLimit: '不限速',
     retry: '重试',
+    moveUp: '上移',
+    moveDown: '下移',
   },
   detail: {
     title: '任务详情',

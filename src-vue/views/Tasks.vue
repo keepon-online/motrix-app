@@ -257,6 +257,8 @@ onUnmounted(() => {
           @remove="confirmRemoveTask(task.gid)"
           @retry="retryTask(task)"
           @show-detail="taskStore.showTaskDetail(task)"
+          @move-up="taskStore.moveTaskUp(task.gid)"
+          @move-down="taskStore.moveTaskDown(task.gid)"
         />
       </template>
       <el-empty v-else :description="t('task.noTasks')" :image-size="120">

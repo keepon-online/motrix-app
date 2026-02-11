@@ -498,6 +498,11 @@ impl Aria2Client {
         self.call("changeOption", vec![json!(gid), options]).await
     }
 
+    /// Change task position in the waiting queue
+    pub async fn change_position(&self, gid: &str, pos: i32, how: &str) -> Result<Value> {
+        self.call("changePosition", vec![json!(gid), json!(pos), json!(how)]).await
+    }
+
     /// Shutdown aria2
     pub async fn shutdown(&self) -> Result<Value> {
         // Save session before shutdown

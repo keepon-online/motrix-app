@@ -53,6 +53,8 @@ export default {
     speedLimited: 'Speed Limited',
     noLimit: 'No Limit',
     retry: 'Retry',
+    moveUp: 'Move Up',
+    moveDown: 'Move Down',
   },
   detail: {
     title: 'Task Details',

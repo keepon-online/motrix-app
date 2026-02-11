@@ -335,6 +335,24 @@ export const useTaskStore = defineStore('task', () => {
     await fetchTasks()
   }
 
+  async function moveTaskUp(gid: string) {
+    try {
+      await invoke('change_task_position', { gid, pos: -1, how: 'POS_CUR' })
+      await fetchTasks()
+    } catch (error) {
+      console.error('Failed to move task up:', error)
+    }
+  }
+
+  async function moveTaskDown(gid: string) {
+    try {
+      await invoke('change_task_position', { gid, pos: 1, how: 'POS_CUR' })
+      await fetchTasks()
+    } catch (error) {
+      console.error('Failed to move task down:', error)
+    }
+  }
+
   return {
     // State
     tasks,
@@ -373,5 +391,7 @@ export const useTaskStore = defineStore('task', () => {
     removeTaskRecord,
     purgeTaskRecords,
     retryTask,
+    moveTaskUp,
+    moveTaskDown,
   }
 })

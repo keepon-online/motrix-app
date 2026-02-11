@@ -148,6 +148,7 @@ fn main() {
             commands::parse_torrent_file,
             commands::prevent_sleep,
             commands::allow_sleep,
+            commands::change_task_position,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

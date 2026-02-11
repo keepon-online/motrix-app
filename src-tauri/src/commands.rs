@@ -455,3 +455,10 @@ pub async fn allow_sleep() -> Result<()> {
         .map_err(|e| Error::Custom(format!("Failed to allow sleep: {}", e)))?;
     Ok(())
 }
+
+/// Change task position in the waiting queue
+#[tauri::command]
+pub async fn change_task_position(gid: String, pos: i32, how: String) -> Result<Value> {
+    let client = aria2::get_client().await?;
+    client.change_position(&gid, pos, &how).await
+}

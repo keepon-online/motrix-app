@@ -68,6 +68,8 @@ const emit = defineEmits<{
   (e: 'remove'): void
   (e: 'showDetail'): void
   (e: 'retry'): void
+  (e: 'moveUp'): void
+  (e: 'moveDown'): void
 }>()
 
 const taskName = computed(() => getTaskName(props.task))
@@ -106,6 +108,7 @@ const statusText = computed(() => {
 
 const isActive = computed(() => props.task.status === 'active')
 const isPaused = computed(() => props.task.status === 'paused' || props.task.status === 'waiting')
+const isWaiting = computed(() => props.task.status === 'waiting' || props.task.status === 'paused')
 const isComplete = computed(() => props.task.status === 'complete')
 const isError = computed(() => props.task.status === 'error')
 
@@ -227,6 +230,24 @@ async function copyLink() {
         :title="t('task.resume')"
       >
         <el-icon><VideoPlay /></el-icon>
+      </el-button>
+      <el-button
+        v-if="isWaiting"
+        circle
+        size="small"
+        @click="emit('moveUp')"
+        :title="t('task.moveUp')"
+      >
+        <el-icon><Top /></el-icon>
+      </el-button>
+      <el-button
+        v-if="isWaiting"
+        circle
+        size="small"
+        @click="emit('moveDown')"
+        :title="t('task.moveDown')"
+      >
+        <el-icon><Bottom /></el-icon>
       </el-button>
       <el-button
         circle
