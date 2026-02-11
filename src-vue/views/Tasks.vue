@@ -32,7 +32,7 @@ let lastSelectedIndex = -1
 
 const pageTitle = computed(() => {
   const status = route.params.status as string
-  if (status === 'stopped') return t('nav.completed')
+  if (status === 'stopped') return t('nav.stopped')
   if (status === 'waiting') return t('nav.waiting')
   return t('nav.downloads')
 })

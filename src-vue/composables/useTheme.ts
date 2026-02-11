@@ -1,5 +1,5 @@
 import { useAppStore } from '@/stores/app'
-import { useDark, useToggle } from '@vueuse/core'
+import { useDark } from '@vueuse/core'
 import { watch } from 'vue'
 
 export function useTheme() {
@@ -10,7 +10,6 @@ export function useTheme() {
     valueDark: 'dark',
     valueLight: '',
   })
-  const toggleDark = useToggle(isDark)
 
   function initTheme() {
     if (!appStore.config) return
@@ -46,7 +45,6 @@ export function useTheme() {
 
   return {
     isDark,
-    toggleDark,
     initTheme,
     setTheme,
   }

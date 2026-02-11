@@ -73,18 +73,6 @@ export const useTaskStore = defineStore('task', () => {
     return result
   })
 
-  const activeTasks = computed(() =>
-    tasks.value.filter((t) => t.status === 'active' || t.status === 'waiting')
-  )
-
-  const downloadSpeed = computed(() => {
-    return tasks.value.reduce((sum, t) => sum + parseInt(t.downloadSpeed || '0'), 0)
-  })
-
-  const uploadSpeed = computed(() => {
-    return tasks.value.reduce((sum, t) => sum + parseInt(t.uploadSpeed || '0'), 0)
-  })
-
   // Actions
   async function fetchTasks(type?: TaskListType) {
     const listType = type ?? currentListType.value
@@ -361,9 +349,6 @@ export const useTaskStore = defineStore('task', () => {
     sortOrder,
     // Getters
     filteredTasks,
-    activeTasks,
-    downloadSpeed,
-    uploadSpeed,
     // Actions
     fetchTasks,
     fetchGlobalStat,
@@ -373,12 +358,10 @@ export const useTaskStore = defineStore('task', () => {
     pauseTask,
     resumeTask,
     removeTask,
-    toggleTask,
     fetchTaskInfo,
     showTaskDetail,
     hideTaskDetail,
     selectTask,
-    deselectTask,
     toggleSelectTask,
     selectAllTasks,
     clearSelection,
