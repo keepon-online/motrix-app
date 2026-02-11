@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, h } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
+import { ElMessageBox, ElCheckbox } from 'element-plus'
 import TaskItem from '@/components/TaskItem.vue'
 import TaskToolbar from '@/components/TaskToolbar.vue'
 import TaskDetail from '@/components/TaskDetail.vue'
@@ -89,7 +90,57 @@ function handleKeydown(e: KeyboardEvent) {
   }
   // Delete: Remove selected
   if (e.key === 'Delete' && taskStore.selectedGids.length > 0) {
-    taskStore.removeSelectedTasks()
+    confirmRemoveSelected()
+  }
+}
+
+// Confirm remove single task
+async function confirmRemoveTask(gid: string) {
+  const deleteFiles = ref(false)
+  try {
+    await ElMessageBox({
+      title: t('task.remove'),
+      message: () => h('div', null, [
+        h('p', null, t('task.removeConfirm')),
+        h(ElCheckbox, {
+          modelValue: deleteFiles.value,
+          'onUpdate:modelValue': (val: boolean) => { deleteFiles.value = val },
+        }, () => t('task.removeWithFiles')),
+      ]),
+      confirmButtonText: t('task.remove'),
+      cancelButtonText: t('dialog.cancel'),
+      showCancelButton: true,
+      type: 'warning',
+    })
+    await taskStore.removeTask(gid, deleteFiles.value)
+  } catch {
+    // User cancelled
+  }
+}
+
+// Confirm remove selected tasks
+async function confirmRemoveSelected() {
+  const count = taskStore.selectedGids.length
+  if (count === 0) return
+  const deleteFiles = ref(false)
+  try {
+    await ElMessageBox({
+      title: t('task.remove'),
+      message: () => h('div', null, [
+        h('p', null, t('task.removeConfirmBatch', { count })),
+        h(ElCheckbox, {
+          modelValue: deleteFiles.value,
+          'onUpdate:modelValue': (val: boolean) => { deleteFiles.value = val },
+        }, () => t('task.removeWithFiles')),
+      ]),
+      confirmButtonText: t('task.remove'),
+      cancelButtonText: t('dialog.cancel'),
+      showCancelButton: true,
+      type: 'warning',
+    })
+    await taskStore.removeSelectedTasks(deleteFiles.value)
+  } catch {
+    // User cancelled
   }
 }
 
@@ -123,7 +174,7 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <TaskToolbar v-if="taskStore.tasks.length > 0" />
+    <TaskToolbar v-if="taskStore.tasks.length > 0" @remove-selected="confirmRemoveSelected" />
 
     <div class="tasks-list">
       <template v-if="taskStore.tasks.length > 0">
@@ -136,7 +187,7 @@ onUnmounted(() => {
           @select="taskStore.toggleSelectTask(task.gid)"
           @pause="taskStore.pauseTask(task.gid)"
           @resume="taskStore.resumeTask(task.gid)"
-          @remove="taskStore.removeTask(task.gid)"
+          @remove="confirmRemoveTask(task.gid)"
           @show-detail="taskStore.showTaskDetail(task)"
         />
       </template>

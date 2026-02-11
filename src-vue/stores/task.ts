@@ -100,9 +100,37 @@ export const useTaskStore = defineStore('task', () => {
     }
   }
 
-  async function removeTask(gid: string) {
+  async function removeTask(gid: string, deleteFiles = false) {
     try {
-      await invoke('remove_task', { gid })
+      const task = tasks.value.find(t => t.gid === gid)
+
+      // Collect file paths before removing the task record
+      if (deleteFiles && task) {
+        const filePaths = task.files
+          ?.map(f => f.path)
+          .filter(p => p && p.length > 0) || []
+        if (filePaths.length > 0) {
+          try {
+            await invoke('delete_task_files', { filePaths })
+          } catch (e) {
+            console.warn('Failed to delete some files:', e)
+          }
+        }
+      }
+
+      if (task && (task.status === 'complete' || task.status === 'error' || task.status === 'removed')) {
+        // Completed/error/removed tasks must use removeDownloadResult
+        await invoke('remove_task_record', { gid })
+      } else {
+        // Active/waiting/paused tasks use force remove then clean up the record
+        await invoke('force_remove_task', { gid })
+        // Also remove the download result record so it doesn't linger in stopped list
+        try {
+          await invoke('remove_task_record', { gid })
+        } catch {
+          // Record may not exist yet, ignore
+        }
+      }
       if (currentTask.value?.gid === gid) {
         currentTask.value = null
         detailVisible.value = false
@@ -178,9 +206,9 @@ export const useTaskStore = defineStore('task', () => {
     }
   }
 
-  async function removeSelectedTasks() {
+  async function removeSelectedTasks(deleteFiles = false) {
     for (const gid of selectedGids.value) {
-      await removeTask(gid)
+      await removeTask(gid, deleteFiles)
     }
     clearSelection()
   }

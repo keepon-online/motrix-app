@@ -16,6 +16,10 @@ const isIndeterminate = computed(() =>
   selectionCount.value > 0 && selectionCount.value < totalCount.value
 )
 
+const emit = defineEmits<{
+  removeSelected: []
+}>()
+
 function toggleSelectAll() {
   if (isAllSelected.value) {
     taskStore.clearSelection()
@@ -33,7 +37,7 @@ async function resumeSelected() {
 }
 
 async function removeSelected() {
-  await taskStore.removeSelectedTasks()
+  emit('removeSelected')
 }
 </script>
 
