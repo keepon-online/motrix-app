@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useTheme } from '@/composables/useTheme'
@@ -13,6 +13,34 @@ const { setTheme } = useTheme()
 
 const trackerInput = ref('')
 const trackerUpdating = ref(false)
+
+// Extract friendly name from tracker source URL
+function getSourceName(url: string): string {
+  try {
+    const u = new URL(url)
+    // e.g. raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all.txt
+    const parts = u.pathname.split('/').filter(Boolean)
+    if (u.hostname === 'raw.githubusercontent.com' && parts.length >= 2) {
+      // owner/repo
+      return `${parts[0]}/${parts[1]}`
+    }
+    if (u.hostname === 'cdn.jsdelivr.net' && parts.length >= 3) {
+      return `${parts[1]}/${parts[2]}`
+    }
+    // fallback: hostname + filename
+    const filename = parts[parts.length - 1] || ''
+    return `${u.hostname}/${filename}`
+  } catch {
+    return url
+  }
+}
+
+// Count loaded trackers
+const trackerCount = computed(() => {
+  const bt = appStore.config?.btTracker
+  if (!bt) return 0
+  return bt.split(',').filter(Boolean).length
+})
 
 // Speed limit presets (in B/s)
 const speedOptions = [
@@ -378,27 +406,43 @@ async function importConfig() {
 
         <el-form-item :label="t('settings.trackers')">
           <div class="tracker-sources">
+            <div class="tracker-status" v-if="trackerCount > 0">
+              <el-tag type="success" size="small" effect="plain">
+                {{ t('settings.trackerCount', { count: trackerCount }) }}
+              </el-tag>
+            </div>
+            <div class="tracker-list" v-if="appStore.config?.trackerSource?.length">
+              <div
+                v-for="url in appStore.config.trackerSource"
+                :key="url"
+                class="tracker-source-item"
+              >
+                <div class="tracker-source-info">
+                  <span class="tracker-source-name">{{ getSourceName(url) }}</span>
+                  <span class="tracker-source-url" :title="url">{{ url }}</span>
+                </div>
+                <el-button
+                  size="small"
+                  type="danger"
+                  text
+                  circle
+                  @click="removeTrackerSource(url)"
+                >
+                  <el-icon><Close /></el-icon>
+                </el-button>
+              </div>
+            </div>
             <div class="tracker-input">
               <el-input
                 v-model="trackerInput"
                 :placeholder="t('settings.trackerPlaceholder')"
                 @keyup.enter="addTrackerSource"
+                size="small"
               >
                 <template #append>
                   <el-button @click="addTrackerSource">{{ t('settings.trackerAdd') }}</el-button>
                 </template>
               </el-input>
-            </div>
-            <div class="tracker-list" v-if="appStore.config?.trackerSource?.length">
-              <el-tag
-                v-for="url in appStore.config.trackerSource"
-                :key="url"
-                closable
-                @close="removeTrackerSource(url)"
-                class="tracker-tag"
-              >
-                {{ url }}
-              </el-tag>
             </div>
             <el-button size="small" @click="updateTrackers" :loading="trackerUpdating" class="update-btn">
               <el-icon v-if="!trackerUpdating"><Refresh /></el-icon>
@@ -668,21 +712,56 @@ async function importConfig() {
   width: 100%;
 }
 
-.tracker-input {
+.tracker-status {
   margin-bottom: 8px;
 }
 
 .tracker-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-direction: column;
+  gap: 4px;
   margin-bottom: 8px;
 }
 
-.tracker-tag {
-  max-width: 300px;
+.tracker-source-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--el-fill-color-light);
+  transition: background 0.15s;
+
+  &:hover {
+    background: var(--el-fill-color);
+  }
+}
+
+.tracker-source-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tracker-source-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+}
+
+.tracker-source-url {
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.tracker-input {
+  margin-bottom: 8px;
 }
 
 .update-btn {
