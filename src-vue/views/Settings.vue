@@ -130,12 +130,55 @@ async function resetDefaults() {
     // User cancelled
   }
 }
+
+async function exportConfig() {
+  try {
+    const { save } = await import('@tauri-apps/plugin-dialog')
+    const { writeTextFile } = await import('@tauri-apps/plugin-fs')
+    const filePath = await save({
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+      defaultPath: 'motrix-config.json',
+    })
+    if (filePath && appStore.config) {
+      await writeTextFile(filePath, JSON.stringify(appStore.config, null, 2))
+      ElMessage.success(t('settings.exportSuccess'))
+    }
+  } catch (e) {
+    console.error('Failed to export config:', e)
+    ElMessage.error(String(e))
+  }
+}
+
+async function importConfig() {
+  try {
+    const filePath = await open({
+      multiple: false,
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    })
+    if (filePath) {
+      const { readTextFile } = await import('@tauri-apps/plugin-fs')
+      const text = await readTextFile(filePath as string)
+      const config = JSON.parse(text)
+      await appStore.saveConfig(config)
+      ElMessage.success(t('settings.importSuccess'))
+    }
+  } catch (e) {
+    console.error('Failed to import config:', e)
+    ElMessage.error(String(e))
+  }
+}
 </script>
 
 <template>
   <div class="settings-view">
     <div class="settings-header">
       <h2 class="settings-title">{{ t('settings.title') }}</h2>
+      <el-button size="small" @click="exportConfig">
+        {{ t('settings.export') }}
+      </el-button>
+      <el-button size="small" @click="importConfig">
+        {{ t('settings.import') }}
+      </el-button>
       <el-button size="small" @click="resetDefaults">
         <el-icon><RefreshRight /></el-icon>
         {{ t('settings.resetDefaults') }}

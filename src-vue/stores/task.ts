@@ -321,6 +321,26 @@ export const useTaskStore = defineStore('task', () => {
     }
   }
 
+  async function retryTask(task: Task) {
+    // Get the download URL from the task
+    const uri = task.files?.[0]?.uris?.[0]?.uri
+    if (!uri) throw new Error('No URI to retry')
+
+    const options: Record<string, string> = {}
+    if (task.dir) options.dir = task.dir
+
+    // Remove the failed task record first
+    try {
+      await invoke('remove_task_record', { gid: task.gid })
+    } catch {
+      // Record may not exist, ignore
+    }
+
+    // Re-add the download
+    await invoke('add_uri', { uris: [uri], options })
+    await fetchTasks()
+  }
+
   return {
     // State
     tasks,
@@ -363,5 +383,6 @@ export const useTaskStore = defineStore('task', () => {
     resumeAllTasks,
     removeTaskRecord,
     purgeTaskRecords,
+    retryTask,
   }
 })

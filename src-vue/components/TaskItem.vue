@@ -29,6 +29,7 @@ function onContextMenuAction(action: string) {
   switch (action) {
     case 'pause': emit('pause'); break
     case 'resume': emit('resume'); break
+    case 'retry': emit('retry'); break
     case 'openFile': openFile(); break
     case 'showInFolder': showInFolder(); break
     case 'copyLink': copyLink(); break
@@ -63,6 +64,7 @@ const emit = defineEmits<{
   (e: 'resume'): void
   (e: 'remove'): void
   (e: 'showDetail'): void
+  (e: 'retry'): void
 }>()
 
 const taskName = computed(() => getTaskName(props.task))
@@ -102,6 +104,7 @@ const statusText = computed(() => {
 const isActive = computed(() => props.task.status === 'active')
 const isPaused = computed(() => props.task.status === 'paused' || props.task.status === 'waiting')
 const isComplete = computed(() => props.task.status === 'complete')
+const isError = computed(() => props.task.status === 'error')
 
 const firstFilePath = computed(() => {
   if (props.task.files?.[0]?.path) return props.task.files[0].path
@@ -249,7 +252,11 @@ async function copyLink() {
           <el-icon><VideoPlay /></el-icon>
           <span>{{ t('task.resume') }}</span>
         </div>
-        <div class="context-menu-divider" v-if="isActive || isPaused" />
+        <div v-if="isError && taskUrl" class="context-menu-item" @click="onContextMenuAction('retry')">
+          <el-icon><RefreshRight /></el-icon>
+          <span>{{ t('task.retry') }}</span>
+        </div>
+        <div class="context-menu-divider" v-if="isActive || isPaused || isError" />
         <div v-if="isComplete && firstFilePath" class="context-menu-item" @click="onContextMenuAction('openFile')">
           <el-icon><Document /></el-icon>
           <span>{{ t('task.openFile') }}</span>

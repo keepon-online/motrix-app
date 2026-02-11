@@ -159,7 +159,7 @@ export const useAppStore = defineStore('app', () => {
       btForceEncryption: false,
       btRequireCrypto: false,
       pauseMetadata: false,
-      userAgent: 'Motrix/2.0.0',
+      userAgent: `Motrix/${__APP_VERSION__}`,
       proxyEnabled: false,
       proxyType: 'http',
       proxyHost: '',

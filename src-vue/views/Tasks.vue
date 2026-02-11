@@ -161,6 +161,14 @@ async function confirmRemoveSelected() {
   }
 }
 
+async function retryTask(task: import('@/types').Task) {
+  try {
+    await taskStore.retryTask(task)
+  } catch (e) {
+    console.error('Failed to retry task:', e)
+  }
+}
+
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
 })
@@ -236,6 +244,7 @@ onUnmounted(() => {
           @pause="taskStore.pauseTask(task.gid)"
           @resume="taskStore.resumeTask(task.gid)"
           @remove="confirmRemoveTask(task.gid)"
+          @retry="retryTask(task)"
           @show-detail="taskStore.showTaskDetail(task)"
         />
       </template>

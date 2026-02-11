@@ -51,6 +51,7 @@ export default {
     sortSpeed: 'Speed',
     speedLimited: 'Speed Limited',
     noLimit: 'No Limit',
+    retry: 'Retry',
   },
   detail: {
     title: 'Task Details',
@@ -154,6 +155,10 @@ export default {
     resetDefaults: 'Reset to Defaults',
     resetConfirm: 'Are you sure you want to reset all settings to defaults?',
     resetSuccess: 'Settings have been reset to defaults',
+    export: 'Export',
+    import: 'Import',
+    exportSuccess: 'Configuration exported successfully',
+    importSuccess: 'Configuration imported successfully',
     trackerUpdateFailed: 'Failed to update trackers',
     trackerCount: '{count} trackers loaded',
   },

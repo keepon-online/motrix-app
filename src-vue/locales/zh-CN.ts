@@ -51,6 +51,7 @@ export default {
     sortSpeed: '速度',
     speedLimited: '已限速',
     noLimit: '不限速',
+    retry: '重试',
   },
   detail: {
     title: '任务详情',
@@ -154,6 +155,10 @@ export default {
     resetDefaults: '恢复默认设置',
     resetConfirm: '确定要将所有设置恢复为默认值吗？',
     resetSuccess: '设置已恢复为默认值',
+    export: '导出',
+    import: '导入',
+    exportSuccess: '配置导出成功',
+    importSuccess: '配置导入成功',
     trackerUpdateFailed: '更新 Tracker 失败',
     trackerCount: '已加载 {count} 个 Tracker',
   },
