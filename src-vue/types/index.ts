@@ -95,6 +95,7 @@ export interface AppConfig {
   autoFileRenaming: boolean
   continueDownload: boolean
   followMetalink: string
+  lastTrackerUpdate: number
 }
 
 // Add task options

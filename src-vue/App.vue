@@ -67,6 +67,9 @@ onMounted(async () => {
 
   // Auto-check for updates after 5 seconds
   setTimeout(() => checkForUpdate(true), 5000)
+
+  // Auto-sync trackers if 12 hours have passed
+  setTimeout(() => appStore.autoSyncTrackers(), 8000)
 })
 </script>
 

@@ -55,6 +55,9 @@ pub struct AppConfig {
     pub proxy_username: String,
     pub proxy_password: String,
     pub no_proxy: String,
+
+    // Tracker auto-sync
+    pub last_tracker_update: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -127,6 +130,8 @@ impl Default for AppConfig {
             proxy_username: String::new(),
             proxy_password: String::new(),
             no_proxy: String::new(),
+
+            last_tracker_update: 0,
         }
     }
 }
