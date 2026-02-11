@@ -259,7 +259,7 @@ pub async fn change_task_option(gid: String, options: Value) -> Result<Value> {
     client.change_option(&gid, options).await
 }
 
-/// Fetch tracker lists from remote sources
+/// Fetch tracker lists from remote sources (parallel)
 #[tauri::command]
 pub async fn fetch_tracker_list(sources: Vec<String>) -> Result<Vec<String>> {
     let client = reqwest::Client::builder()
@@ -267,29 +267,36 @@ pub async fn fetch_tracker_list(sources: Vec<String>) -> Result<Vec<String>> {
         .build()
         .map_err(|e| Error::Custom(format!("Failed to create HTTP client: {}", e)))?;
 
-    let mut all_trackers = Vec::new();
-
-    for source in &sources {
-        match client.get(source).send().await {
-            Ok(response) => {
-                if response.status().is_success() {
-                    if let Ok(text) = response.text().await {
-                        let trackers: Vec<String> = text
-                            .lines()
-                            .map(|line| line.trim().to_string())
-                            .filter(|line| !line.is_empty())
-                            .collect();
-                        all_trackers.extend(trackers);
+    // Fetch all sources in parallel
+    let futures: Vec<_> = sources.iter().map(|source| {
+        let client = client.clone();
+        let source = source.clone();
+        async move {
+            match client.get(&source).send().await {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        if let Ok(text) = response.text().await {
+                            let trackers: Vec<String> = text
+                                .lines()
+                                .map(|line| line.trim().to_string())
+                                .filter(|line| !line.is_empty())
+                                .collect();
+                            return trackers;
+                        }
                     }
-                } else {
-                    tracing::warn!("Failed to fetch tracker source {}: HTTP {}", source, response.status());
+                    tracing::warn!("Failed to fetch tracker source {}: HTTP error", source);
+                    Vec::new()
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to fetch tracker source {}: {}", source, e);
+                    Vec::new()
                 }
             }
-            Err(e) => {
-                tracing::warn!("Failed to fetch tracker source {}: {}", source, e);
-            }
         }
-    }
+    }).collect();
+
+    let results = futures_util::future::join_all(futures).await;
+    let mut all_trackers: Vec<String> = results.into_iter().flatten().collect();
 
     // Deduplicate
     let mut seen = std::collections::HashSet::new();

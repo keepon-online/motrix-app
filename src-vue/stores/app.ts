@@ -181,7 +181,11 @@ export const useAppStore = defineStore('app', () => {
       seedRatio: 1.0,
       seedTime: 60,
       btTracker: '',
-      trackerSource: ['https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt'],
+      trackerSource: [
+        'https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all.txt',
+        'https://raw.githubusercontent.com/XIU2/TrackersListCollection/master/all.txt',
+        'https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_all.txt',
+      ],
       btForceEncryption: false,
       btRequireCrypto: false,
       pauseMetadata: false,
