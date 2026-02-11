@@ -93,6 +93,9 @@ const statusText = computed(() => {
     error: t('task.error'),
     removed: t('task.removed'),
   }
+  if (props.task.status === 'error' && props.task.errorMessage) {
+    return `${t('task.error')}: ${props.task.errorMessage}`
+  }
   return statusMap[props.task.status] || props.task.status
 })
 
@@ -162,7 +165,7 @@ async function copyLink() {
           <el-icon style="margin-left: 8px"><Upload /></el-icon> {{ uploadSpeed }}
         </span>
         <span v-if="isActive" class="task-eta">{{ t('detail.eta') }}: {{ remainingTime }}</span>
-        <span v-if="!isActive" class="task-status">{{ statusText }}</span>
+        <span v-if="!isActive" class="task-status" :title="statusText">{{ statusText }}</span>
       </div>
       <el-progress
         :percentage="progress"

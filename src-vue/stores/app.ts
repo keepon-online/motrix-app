@@ -70,12 +70,12 @@ export const useAppStore = defineStore('app', () => {
       config.value = updated
 
       // Sync download-related options to aria2 engine in real-time
+      // Only global options that can be changed at runtime via aria2 changeGlobalOption
+      // Note: split, max-connection-per-server are per-task options, not global
       const aria2Keys: Record<string, string> = {
         maxConcurrentDownloads: 'max-concurrent-downloads',
-        maxConnectionPerServer: 'max-connection-per-server',
-        split: 'split',
-        maxDownloadLimit: 'max-overall-download-limit',
-        maxUploadLimit: 'max-overall-upload-limit',
+        maxDownloadLimit: 'max-download-limit',
+        maxUploadLimit: 'max-upload-limit',
         maxOverallDownloadLimit: 'max-overall-download-limit',
         maxOverallUploadLimit: 'max-overall-upload-limit',
         userAgent: 'user-agent',

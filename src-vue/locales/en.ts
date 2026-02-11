@@ -43,6 +43,12 @@ export default {
     failedOpenFile: 'Failed to open file',
     failedOpenFolder: 'Failed to open folder',
     failedCopyLink: 'Failed to copy link',
+    search: 'Search tasks...',
+    sortDefault: 'Default',
+    sortName: 'Name',
+    sortSize: 'Size',
+    sortProgress: 'Progress',
+    sortSpeed: 'Speed',
   },
   detail: {
     title: 'Task Details',

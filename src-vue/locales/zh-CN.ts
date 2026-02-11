@@ -43,6 +43,12 @@ export default {
     failedOpenFile: '打开文件失败',
     failedOpenFolder: '打开文件夹失败',
     failedCopyLink: '复制链接失败',
+    search: '搜索任务...',
+    sortDefault: '默认排序',
+    sortName: '名称',
+    sortSize: '大小',
+    sortProgress: '进度',
+    sortSpeed: '速度',
   },
   detail: {
     title: '任务详情',
