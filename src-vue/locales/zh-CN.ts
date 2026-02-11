@@ -184,6 +184,8 @@ export default {
     authorizationPlaceholder: '例如 Bearer token123',
     cancel: '取消',
     add: '添加',
+    metalink: 'Metalink',
+    selectMetalink: '选择 Metalink 文件',
   },
   dragDrop: {
     hint: '拖拽文件或链接到此处下载',
