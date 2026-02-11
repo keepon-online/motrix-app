@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
 import { formatBytes, formatSpeed, formatDuration, calcProgress, calcRemainingTime, getTaskName, isBtTask } from '@/utils'
@@ -13,6 +13,32 @@ const taskStore = useTaskStore()
 
 const task = computed(() => taskStore.currentTask)
 const visible = computed(() => taskStore.detailVisible)
+
+// Auto-refresh task detail when drawer is open
+const refreshTimer = ref<ReturnType<typeof setInterval> | null>(null)
+
+watch(visible, (val) => {
+  if (val && task.value) {
+    // Start polling
+    refreshTimer.value = setInterval(() => {
+      if (task.value && (task.value.status === 'active' || task.value.status === 'waiting' || task.value.status === 'paused')) {
+        taskStore.fetchTaskInfo(task.value.gid)
+      }
+    }, 1000)
+  } else {
+    // Stop polling
+    if (refreshTimer.value) {
+      clearInterval(refreshTimer.value)
+      refreshTimer.value = null
+    }
+  }
+})
+
+onUnmounted(() => {
+  if (refreshTimer.value) {
+    clearInterval(refreshTimer.value)
+  }
+})
 
 const taskName = computed(() => task.value ? getTaskName(task.value) : '')
 const progress = computed(() => task.value ? calcProgress(task.value.totalLength, task.value.completedLength) : 0)

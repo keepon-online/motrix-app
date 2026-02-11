@@ -100,7 +100,7 @@ async function resetDefaults() {
     await ElMessageBox.confirm(
       t('settings.resetConfirm'),
       t('settings.resetDefaults'),
-      { confirmButtonText: t('dialog.add'), cancelButtonText: t('dialog.cancel'), type: 'warning' }
+      { confirmButtonText: t('settings.resetDefaults'), cancelButtonText: t('dialog.cancel'), type: 'warning' }
     )
     await appStore.resetConfig()
     ElMessage.success(t('settings.resetSuccess'))

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, inject, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
 import { useAppStore } from '@/stores/app'
@@ -25,6 +25,9 @@ const visible = defineModel<boolean>({ default: false })
 
 const taskStore = useTaskStore()
 const appStore = useAppStore()
+
+// Receive pending URLs from App.vue (CLI args, deep links, second instance)
+const pendingUrls = inject<Ref<string[]>>('pendingUrls', ref([]))
 
 const activeTab = ref<'uri' | 'torrent'>('uri')
 const uriInput = ref('')
@@ -58,10 +61,16 @@ const allFilesSelected = computed(() => {
   return selectedFileIndices.value.length === torrentInfo.value.files.length
 })
 
-// Auto-detect clipboard content when dialog opens
+// Auto-detect clipboard content or consume pending URLs when dialog opens
 watch(visible, async (val) => {
   if (val) {
     downloadDir.value = appStore.downloadDir
+    // Consume pending URLs from CLI args / deep links / second instance
+    if (pendingUrls.value.length > 0) {
+      uriInput.value = pendingUrls.value.join('\n')
+      pendingUrls.value = []
+      return
+    }
     try {
       const clipText = await readText()
       if (clipText && isUrl(clipText.trim()) && !uriInput.value) {

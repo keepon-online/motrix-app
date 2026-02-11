@@ -2,6 +2,7 @@ import { onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { useTaskStore } from '@/stores/task'
+import { useAppStore } from '@/stores/app'
 import { ElNotification } from 'element-plus'
 
 export interface Aria2Event {
@@ -12,6 +13,7 @@ export interface Aria2Event {
 export function useAria2Events() {
   const { t } = useI18n()
   const taskStore = useTaskStore()
+  const appStore = useAppStore()
   let unlisten: UnlistenFn | null = null
 
   async function setupEventListener() {
@@ -52,6 +54,10 @@ export function useAria2Events() {
         taskStore.fetchTasks('active')
         taskStore.fetchTasks('stopped')
         taskStore.fetchGlobalStat()
+        // Auto clear completed task record if configured
+        if (appStore.config?.autoClearCompleted) {
+          taskStore.removeTaskRecord(event.gid).catch(() => {})
+        }
         break
 
       case 'download_error':

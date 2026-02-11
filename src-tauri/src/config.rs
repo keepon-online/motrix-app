@@ -154,7 +154,7 @@ impl AppConfig {
             "--rpc-allow-origin-all=true".to_string(),
             "--enable-dht=true".to_string(),
             "--enable-dht6=true".to_string(),
-            format!("--enable-peer-exchange={}", self.enable_upnp),
+            format!("--enable-peer-exchange=true"),
             "--bt-enable-lpd=true".to_string(),
             "--follow-torrent=true".to_string(),
             "--check-certificate=false".to_string(),

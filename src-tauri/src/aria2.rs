@@ -265,13 +265,27 @@ impl Aria2Client {
                 tracing::error!("Failed to emit aria2 event: {}", e);
             }
 
-            // Send system notification for download complete/error
+            // Send system notification for download complete/error (respecting config)
+            let notify_on_complete = {
+                use tauri_plugin_store::StoreExt;
+                app_handle
+                    .store("config.json")
+                    .ok()
+                    .and_then(|store| store.get("config"))
+                    .and_then(|v| v.get("notifyOnComplete").and_then(|v| v.as_bool()))
+                    .unwrap_or(true)
+            };
+
             match event_type {
                 Aria2EventType::DownloadComplete | Aria2EventType::BtDownloadComplete => {
-                    Self::send_notification(app_handle, "Download Complete", &format!("Task {} has completed", param.gid));
+                    if notify_on_complete {
+                        Self::send_notification(app_handle, "Download Complete", &format!("Task {} has completed", param.gid));
+                    }
                 }
                 Aria2EventType::DownloadError => {
-                    Self::send_notification(app_handle, "Download Error", &format!("Task {} encountered an error", param.gid));
+                    if notify_on_complete {
+                        Self::send_notification(app_handle, "Download Error", &format!("Task {} encountered an error", param.gid));
+                    }
                 }
                 _ => {}
             }

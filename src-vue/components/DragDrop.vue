@@ -48,7 +48,9 @@ async function handleDrop(e: DragEvent) {
     const urls = text.split('\n').map(u => u.trim()).filter(u => isUrl(u))
     if (urls.length > 0) {
       try {
-        await taskStore.addUri(urls, { dir: appStore.downloadDir })
+        for (const url of urls) {
+          await taskStore.addUri([url], { dir: appStore.downloadDir })
+        }
         ElMessage.success(`${t('dialog.addTask')}: ${urls.length}`)
       } catch (error) {
         ElMessage.error(t('task.error'))

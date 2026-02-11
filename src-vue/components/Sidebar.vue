@@ -19,8 +19,8 @@ const isActive = (path: string) => {
   return route.path === path
 }
 
-const downloadSpeedText = computed(() => formatSpeed(taskStore.downloadSpeed))
-const uploadSpeedText = computed(() => formatSpeed(taskStore.uploadSpeed))
+const downloadSpeedText = computed(() => formatSpeed(taskStore.globalStat?.downloadSpeed ?? '0'))
+const uploadSpeedText = computed(() => formatSpeed(taskStore.globalStat?.uploadSpeed ?? '0'))
 </script>
 
 <template>
