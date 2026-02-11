@@ -193,14 +193,6 @@ export const useTaskStore = defineStore('task', () => {
     }
   }
 
-  async function toggleTask(task: Task) {
-    if (task.status === 'active') {
-      await pauseTask(task.gid)
-    } else if (task.status === 'paused' || task.status === 'waiting') {
-      await resumeTask(task.gid)
-    }
-  }
-
   async function fetchTaskInfo(gid: string) {
     try {
       currentTask.value = await invoke<Task>('get_task_info', { gid })

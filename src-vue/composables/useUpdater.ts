@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { check } from '@tauri-apps/plugin-updater'
+import { check, type DownloadEvent } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 
 export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'upToDate' | 'error'
@@ -26,7 +26,7 @@ export function useUpdater() {
         let downloadedBytes = 0
         status.value = 'downloading'
 
-        await update.downloadAndInstall((event) => {
+        await update.downloadAndInstall((event: DownloadEvent) => {
           if (event.event === 'Started' && event.data.contentLength) {
             totalBytes = event.data.contentLength
           } else if (event.event === 'Progress') {

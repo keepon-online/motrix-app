@@ -37,19 +37,12 @@ onMounted(async () => {
 
     <div class="about-update">
       <el-button
-        v-if="status === 'idle' || status === 'upToDate' || status === 'error'"
+        v-if="status === 'idle' || status === 'upToDate' || status === 'error' || status === 'checking'"
         size="small"
         @click="checkForUpdate()"
         :loading="status === 'checking'"
       >
         {{ status === 'upToDate' ? t('about.upToDate') : t('about.checkUpdate') }}
-      </el-button>
-      <el-button
-        v-else-if="status === 'checking'"
-        size="small"
-        loading
-      >
-        {{ t('about.checking') }}
       </el-button>
       <div v-else-if="status === 'downloading'" class="update-progress">
         <span>{{ t('about.downloading', { version: newVersion }) }}</span>
