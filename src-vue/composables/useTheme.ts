@@ -20,8 +20,10 @@ export function useTheme() {
       isDark.value = true
     } else if (theme === 'light') {
       isDark.value = false
+    } else {
+      // 'auto' - follow system preference
+      isDark.value = window.matchMedia('(prefers-color-scheme: dark)').matches
     }
-    // 'auto' will use system preference (handled by useDark)
   }
 
   watch(
@@ -31,6 +33,8 @@ export function useTheme() {
         isDark.value = true
       } else if (theme === 'light') {
         isDark.value = false
+      } else if (theme === 'auto') {
+        isDark.value = window.matchMedia('(prefers-color-scheme: dark)').matches
       }
     }
   )

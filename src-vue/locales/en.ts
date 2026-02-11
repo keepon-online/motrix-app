@@ -49,6 +49,8 @@ export default {
     sortSize: 'Size',
     sortProgress: 'Progress',
     sortSpeed: 'Speed',
+    speedLimited: 'Speed Limited',
+    noLimit: 'No Limit',
   },
   detail: {
     title: 'Task Details',

@@ -17,6 +17,7 @@ const taskStore = useTaskStore()
 const addDialogVisible = ref(false)
 let refreshInterval: number | null = null
 let currentInterval = 1000
+let lastSelectedIndex = -1
 
 const pageTitle = computed(() => {
   const status = route.params.status as string
@@ -76,6 +77,21 @@ watch(() => route.params.status, () => {
   taskStore.clearSelection()
   fetchTasks()
 })
+
+// Shift+Click range selection
+function handleTaskClick(e: MouseEvent, gid: string, index: number) {
+  if (e.shiftKey && lastSelectedIndex >= 0) {
+    const tasks = taskStore.filteredTasks
+    const start = Math.min(lastSelectedIndex, index)
+    const end = Math.max(lastSelectedIndex, index)
+    for (let i = start; i <= end; i++) {
+      taskStore.selectTask(tasks[i].gid)
+    }
+  } else {
+    taskStore.toggleSelectTask(gid)
+    lastSelectedIndex = index
+  }
+}
 
 // Keyboard shortcuts
 function handleKeydown(e: KeyboardEvent) {
@@ -211,11 +227,11 @@ onUnmounted(() => {
     <div class="tasks-list">
       <template v-if="taskStore.filteredTasks.length > 0">
         <TaskItem
-          v-for="task in taskStore.filteredTasks"
+          v-for="(task, index) in taskStore.filteredTasks"
           :key="task.gid"
           :task="task"
           :selected="taskStore.selectedGids.includes(task.gid)"
-          @click="taskStore.toggleSelectTask(task.gid)"
+          @click="(e: MouseEvent) => handleTaskClick(e, task.gid, index)"
           @select="taskStore.toggleSelectTask(task.gid)"
           @pause="taskStore.pauseTask(task.gid)"
           @resume="taskStore.resumeTask(task.gid)"

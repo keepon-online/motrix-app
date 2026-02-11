@@ -49,6 +49,8 @@ export default {
     sortSize: '大小',
     sortProgress: '进度',
     sortSpeed: '速度',
+    speedLimited: '已限速',
+    noLimit: '不限速',
   },
   detail: {
     title: '任务详情',

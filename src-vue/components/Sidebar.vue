@@ -1,13 +1,42 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
+import { useAppStore } from '@/stores/app'
 import { formatSpeed } from '@/utils'
+import { invoke } from '@tauri-apps/api/core'
 
 const { t } = useI18n()
 const route = useRoute()
 const taskStore = useTaskStore()
+const appStore = useAppStore()
+
+const speedLimitPresets = ['0', '128K', '512K', '1M', '5M', '10M']
+const showSpeedMenu = ref(false)
+
+const isLimited = computed(() => {
+  const limit = appStore.config?.maxOverallDownloadLimit || '0'
+  return limit !== '0'
+})
+
+async function setSpeedLimit(limit: string) {
+  await appStore.saveConfig({
+    maxOverallDownloadLimit: limit,
+    maxOverallUploadLimit: limit,
+  })
+  try {
+    await invoke('change_global_option', {
+      options: {
+        'max-overall-download-limit': limit,
+        'max-overall-upload-limit': limit,
+      }
+    })
+  } catch (e) {
+    console.warn('Failed to set speed limit:', e)
+  }
+  showSpeedMenu.value = false
+}
 
 const numActive = computed(() => parseInt(taskStore.globalStat?.numActive ?? '0'))
 const numWaiting = computed(() => parseInt(taskStore.globalStat?.numWaiting ?? '0'))
@@ -46,16 +75,40 @@ const uploadSpeedText = computed(() => formatSpeed(taskStore.globalStat?.uploadS
     </nav>
 
     <div class="sidebar-footer">
-      <div class="speed-info">
-        <div class="speed-item">
-          <el-icon><Download /></el-icon>
-          <span>{{ downloadSpeedText }}</span>
+      <el-popover
+        :visible="showSpeedMenu"
+        placement="top"
+        :width="160"
+        trigger="click"
+        @update:visible="(v: boolean) => showSpeedMenu = v"
+      >
+        <template #reference>
+          <div class="speed-info" :class="{ limited: isLimited }" @click="showSpeedMenu = !showSpeedMenu">
+            <div class="speed-item">
+              <el-icon><Download /></el-icon>
+              <span>{{ downloadSpeedText }}</span>
+            </div>
+            <div class="speed-item">
+              <el-icon><Upload /></el-icon>
+              <span>{{ uploadSpeedText }}</span>
+            </div>
+            <div v-if="isLimited" class="speed-limit-tag">
+              {{ t('task.speedLimited') }}
+            </div>
+          </div>
+        </template>
+        <div class="speed-menu">
+          <div
+            v-for="preset in speedLimitPresets"
+            :key="preset"
+            class="speed-menu-item"
+            :class="{ active: (appStore.config?.maxOverallDownloadLimit || '0') === preset }"
+            @click="setSpeedLimit(preset)"
+          >
+            {{ preset === '0' ? t('task.noLimit') : preset + '/s' }}
+          </div>
         </div>
-        <div class="speed-item">
-          <el-icon><Upload /></el-icon>
-          <span>{{ uploadSpeedText }}</span>
-        </div>
-      </div>
+      </el-popover>
 
       <div class="sidebar-actions">
         <router-link to="/settings" class="action-btn" :class="{ active: route.path === '/settings' }">
@@ -134,6 +187,19 @@ const uploadSpeedText = computed(() => formatSpeed(taskStore.globalStat?.uploadS
 
 .speed-info {
   margin-bottom: 16px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 6px;
+  transition: all 0.2s;
+
+  &:hover {
+    background: var(--el-fill-color-light);
+  }
+
+  &.limited {
+    border: 1px solid var(--el-color-warning-light-5);
+    background: var(--el-color-warning-light-9);
+  }
 
   .speed-item {
     display: flex;
@@ -142,6 +208,13 @@ const uploadSpeedText = computed(() => formatSpeed(taskStore.globalStat?.uploadS
     font-size: 12px;
     color: var(--el-text-color-secondary);
     margin-bottom: 4px;
+  }
+
+  .speed-limit-tag {
+    font-size: 11px;
+    color: var(--el-color-warning);
+    margin-top: 4px;
+    text-align: center;
   }
 }
 
@@ -169,5 +242,22 @@ const uploadSpeedText = computed(() => formatSpeed(taskStore.globalStat?.uploadS
     background: var(--el-color-primary-light-9);
     color: var(--el-color-primary);
   }
+}
+</style>
+
+<style>
+.speed-menu .speed-menu-item {
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+.speed-menu .speed-menu-item:hover {
+  background: var(--el-fill-color-light);
+}
+.speed-menu .speed-menu-item.active {
+  color: var(--el-color-primary);
+  font-weight: 600;
 }
 </style>

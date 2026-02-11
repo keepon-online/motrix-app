@@ -57,7 +57,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'click'): void
+  (e: 'click', event: MouseEvent): void
   (e: 'select'): void
   (e: 'pause'): void
   (e: 'resume'): void
@@ -148,7 +148,7 @@ async function copyLink() {
   <div
     class="task-item"
     :class="[statusClass, { selected }]"
-    @click="emit('click')"
+    @click="emit('click', $event)"
     @dblclick="emit('showDetail')"
     @contextmenu.prevent="showContextMenu"
   >

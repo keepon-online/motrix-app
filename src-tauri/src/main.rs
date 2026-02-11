@@ -50,6 +50,24 @@ fn main() {
             // Initialize tray
             tray::create_tray(app)?;
 
+            // Hide window on startup if configured
+            {
+                use tauri_plugin_store::StoreExt;
+                let start_hidden = app.handle()
+                    .store("config.json")
+                    .ok()
+                    .and_then(|store| store.get("config"))
+                    .and_then(|v| v.get("startHidden").and_then(|v| v.as_bool()))
+                    .unwrap_or(false);
+
+                if start_hidden {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.hide();
+                        tracing::info!("Window hidden on startup (startHidden=true)");
+                    }
+                }
+            }
+
             // Parse command line arguments from first launch
             let args: Vec<String> = std::env::args().collect();
             let urls = cli::parse_args(&args);
