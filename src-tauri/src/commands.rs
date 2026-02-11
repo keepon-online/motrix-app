@@ -13,11 +13,19 @@ use tauri_plugin_store::StoreExt;
 pub async fn get_app_config(app: tauri::AppHandle) -> Result<AppConfig> {
     let store = app.store("config.json")?;
 
-    // Try to load from store, or use defaults
+    // Try to load from store, or use defaults (persist to ensure rpc_secret consistency)
     let config: AppConfig = if let Some(data) = store.get("config") {
-        serde_json::from_value(data.clone()).unwrap_or_default()
+        serde_json::from_value(data.clone()).unwrap_or_else(|_| {
+            let default_config = AppConfig::default();
+            store.set("config", serde_json::to_value(&default_config).unwrap());
+            let _ = store.save();
+            default_config
+        })
     } else {
-        AppConfig::default()
+        let default_config = AppConfig::default();
+        store.set("config", serde_json::to_value(&default_config).unwrap());
+        let _ = store.save();
+        default_config
     };
 
     Ok(config)

@@ -67,12 +67,22 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
     use tauri_plugin_store::StoreExt;
     use crate::config::AppConfig;
 
-    // Load full config from store
+    // Load full config from store, persist defaults on first launch to ensure
+    // rpc_secret consistency (AppConfig::default() generates a random UUID each time)
     let store = app.store("config.json")?;
     let config: AppConfig = if let Some(config_val) = store.get("config") {
-        serde_json::from_value(config_val.clone()).unwrap_or_default()
+        serde_json::from_value(config_val.clone()).unwrap_or_else(|e| {
+            tracing::warn!("Failed to deserialize config, regenerating defaults: {}", e);
+            let default_config = AppConfig::default();
+            store.set("config", serde_json::to_value(&default_config).unwrap());
+            let _ = store.save();
+            default_config
+        })
     } else {
-        AppConfig::default()
+        let default_config = AppConfig::default();
+        store.set("config", serde_json::to_value(&default_config).unwrap());
+        let _ = store.save();
+        default_config
     };
 
     let port = config.rpc_port;
