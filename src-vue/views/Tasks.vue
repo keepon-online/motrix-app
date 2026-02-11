@@ -104,7 +104,7 @@ async function confirmRemoveTask(gid: string) {
         h('p', null, t('task.removeConfirm')),
         h(ElCheckbox, {
           modelValue: deleteFiles.value,
-          'onUpdate:modelValue': (val: boolean) => { deleteFiles.value = val },
+          'onUpdate:modelValue': (val: string | number | boolean) => { deleteFiles.value = !!val },
         }, () => t('task.removeWithFiles')),
       ]),
       confirmButtonText: t('task.remove'),
@@ -130,7 +130,7 @@ async function confirmRemoveSelected() {
         h('p', null, t('task.removeConfirmBatch', { count })),
         h(ElCheckbox, {
           modelValue: deleteFiles.value,
-          'onUpdate:modelValue': (val: boolean) => { deleteFiles.value = val },
+          'onUpdate:modelValue': (val: string | number | boolean) => { deleteFiles.value = !!val },
         }, () => t('task.removeWithFiles')),
       ]),
       confirmButtonText: t('task.remove'),
