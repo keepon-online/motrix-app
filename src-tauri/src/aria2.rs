@@ -372,6 +372,15 @@ impl Aria2Client {
             .ok_or_else(|| Error::Aria2Rpc("Invalid response".to_string()))
     }
 
+    /// Add metalink download
+    pub async fn add_metalink(&self, metalink: &str, options: Option<Value>) -> Result<Value> {
+        let mut params = vec![json!(metalink)];
+        if let Some(opts) = options {
+            params.push(opts);
+        }
+        self.call("addMetalink", params).await
+    }
+
     /// Pause task
     pub async fn pause(&self, gid: &str) -> Result<String> {
         let result = self.call("pause", vec![json!(gid)]).await?;

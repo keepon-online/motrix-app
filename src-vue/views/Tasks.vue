@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, h } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, h, inject, type Ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
@@ -15,7 +15,18 @@ const route = useRoute()
 const taskStore = useTaskStore()
 
 const addDialogVisible = ref(false)
+const showAddDialog = inject<Ref<boolean>>('showAddDialog')
 let refreshInterval: number | null = null
+
+// Sync with App.vue's showAddDialog (for deep-link/CLI URL handling)
+if (showAddDialog) {
+  watch(showAddDialog, (val) => {
+    if (val) {
+      addDialogVisible.value = true
+      showAddDialog.value = false
+    }
+  })
+}
 let currentInterval = 1000
 let lastSelectedIndex = -1
 

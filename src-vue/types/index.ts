@@ -97,12 +97,6 @@ export interface AppConfig {
   followMetalink: string
 }
 
-export interface ProxyConfig {
-  enable: boolean
-  server: string
-  bypass: string
-}
-
 // Add task options
 export interface AddTaskOptions {
   dir?: string

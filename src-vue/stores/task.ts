@@ -130,6 +130,16 @@ export const useTaskStore = defineStore('task', () => {
     }
   }
 
+  async function addMetalink(metalink: string, options?: AddTaskOptions) {
+    try {
+      await invoke('add_metalink_file_base64', { metalink, options })
+      await fetchTasks()
+    } catch (error) {
+      console.error('Failed to add metalink:', error)
+      throw error
+    }
+  }
+
   async function pauseTask(gid: string) {
     try {
       // Check if BT task, use forcePause for BT
@@ -359,6 +369,7 @@ export const useTaskStore = defineStore('task', () => {
     fetchGlobalStat,
     addUri,
     addTorrent,
+    addMetalink,
     pauseTask,
     resumeTask,
     removeTask,

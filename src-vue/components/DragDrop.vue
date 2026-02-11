@@ -19,6 +19,23 @@ function isTorrentFile(name: string): boolean {
   return name.toLowerCase().endsWith('.torrent')
 }
 
+function isMetalinkFile(name: string): boolean {
+  const lower = name.toLowerCase()
+  return lower.endsWith('.metalink') || lower.endsWith('.meta4')
+}
+
+async function fileToBase64(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer()
+  const bytes = new Uint8Array(buffer)
+  const chunkSize = 32768
+  const chunks: string[] = []
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize)
+    chunks.push(String.fromCharCode(...chunk))
+  }
+  return btoa(chunks.join(''))
+}
+
 async function handleDrop(e: DragEvent) {
   e.preventDefault()
   isDragging.value = false
@@ -31,20 +48,16 @@ async function handleDrop(e: DragEvent) {
     for (const file of Array.from(files)) {
       if (isTorrentFile(file.name)) {
         try {
-          // Use backend to read and base64-encode torrent file
-          // For drag-dropped files, we need to write to temp then use backend
-          // But File API doesn't give us a path, so we base64-encode in chunks
-          const buffer = await file.arrayBuffer()
-          const bytes = new Uint8Array(buffer)
-          // Use efficient chunk-based base64 encoding
-          const chunkSize = 32768
-          const chunks: string[] = []
-          for (let i = 0; i < bytes.length; i += chunkSize) {
-            const chunk = bytes.subarray(i, i + chunkSize)
-            chunks.push(String.fromCharCode(...chunk))
-          }
-          const base64 = btoa(chunks.join(''))
+          const base64 = await fileToBase64(file)
           await taskStore.addTorrent(base64, { dir: appStore.downloadDir })
+          ElMessage.success(`${t('dialog.addTask')}: ${file.name}`)
+        } catch (error) {
+          ElMessage.error(`${t('task.error')}: ${file.name}`)
+        }
+      } else if (isMetalinkFile(file.name)) {
+        try {
+          const base64 = await fileToBase64(file)
+          await taskStore.addMetalink(base64, { dir: appStore.downloadDir })
           ElMessage.success(`${t('dialog.addTask')}: ${file.name}`)
         } catch (error) {
           ElMessage.error(`${t('task.error')}: ${file.name}`)

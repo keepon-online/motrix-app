@@ -6,7 +6,7 @@ use base64::Engine;
 pub fn parse_args(argv: &[String]) -> Vec<String> {
     argv.iter()
         .skip(1) // Skip program name
-        .filter(|arg| is_downloadable_url(arg) || is_torrent_file(arg))
+        .filter(|arg| is_downloadable_url(arg) || is_torrent_file(arg) || is_metalink_file(arg))
         .map(|arg| decode_thunder_url(arg))
         .collect()
 }
@@ -46,5 +46,12 @@ pub fn is_downloadable_url(s: &str) -> bool {
 /// Check if a string is a path to an existing .torrent file
 pub fn is_torrent_file(s: &str) -> bool {
     s.to_lowercase().ends_with(".torrent")
+        && std::path::Path::new(s).exists()
+}
+
+/// Check if a string is a path to an existing metalink file
+pub fn is_metalink_file(s: &str) -> bool {
+    let lower = s.to_lowercase();
+    (lower.ends_with(".metalink") || lower.ends_with(".meta4"))
         && std::path::Path::new(s).exists()
 }

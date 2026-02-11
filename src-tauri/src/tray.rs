@@ -38,7 +38,6 @@ pub fn create_tray<R: Runtime>(app: &tauri::App<R>) -> Result<(), tauri::Error> 
                 }
             }
             "pause_all" => {
-                let _app = app.clone();
                 tauri::async_runtime::spawn(async move {
                     match aria2::get_client().await {
                         Ok(client) => {
@@ -53,7 +52,6 @@ pub fn create_tray<R: Runtime>(app: &tauri::App<R>) -> Result<(), tauri::Error> 
                 });
             }
             "resume_all" => {
-                let _app = app.clone();
                 tauri::async_runtime::spawn(async move {
                     match aria2::get_client().await {
                         Ok(client) => {

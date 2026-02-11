@@ -57,6 +57,24 @@ pub async fn add_torrent_file(file_path: String, options: Option<Value>) -> Resu
     client.add_torrent(&b64, options).await
 }
 
+/// Add metalink download task from file path
+#[tauri::command]
+pub async fn add_metalink_file(file_path: String, options: Option<Value>) -> Result<Value> {
+    use base64::Engine;
+    let data = std::fs::read(&file_path)
+        .map_err(|e| Error::Custom(format!("Failed to read metalink file: {}", e)))?;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
+    let client = aria2::get_client().await?;
+    client.add_metalink(&b64, options).await
+}
+
+/// Add metalink download task from base64 data (for drag-drop)
+#[tauri::command]
+pub async fn add_metalink_file_base64(metalink: String, options: Option<Value>) -> Result<Value> {
+    let client = aria2::get_client().await?;
+    client.add_metalink(&metalink, options).await
+}
+
 /// Pause a task
 #[tauri::command]
 pub async fn pause_task(gid: String) -> Result<String> {

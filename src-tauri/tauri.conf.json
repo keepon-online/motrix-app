@@ -50,6 +50,11 @@
         "ext": ["torrent"],
         "mimeType": "application/x-bittorrent",
         "description": "Torrent File"
+      },
+      {
+        "ext": ["metalink", "meta4"],
+        "mimeType": "application/metalink+xml",
+        "description": "Metalink File"
       }
     ],
     "linux": {
@@ -78,7 +83,7 @@
     },
     "deep-link": {
       "desktop": {
-        "schemes": ["motrix", "magnet"]
+        "schemes": ["motrix", "magnet", "thunder"]
       }
     }
   }

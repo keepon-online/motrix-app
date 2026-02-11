@@ -118,6 +118,8 @@ fn main() {
             commands::add_uri,
             commands::add_torrent,
             commands::add_torrent_file,
+            commands::add_metalink_file,
+            commands::add_metalink_file_base64,
             commands::pause_task,
             commands::resume_task,
             commands::remove_task,
