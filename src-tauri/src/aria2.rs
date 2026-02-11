@@ -4,9 +4,13 @@ use crate::{Error, Result};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
+
+/// Atomic counter for generating unique RPC request IDs (safe for JSON number precision)
+static RPC_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 /// Aria2 event types
@@ -58,6 +62,9 @@ struct RpcRequest {
 
 /// Global aria2 client instance
 static ARIA2_CLIENT: RwLock<Option<Arc<Aria2Client>>> = RwLock::const_new(None);
+
+/// Global aria2 child process handle (must be kept alive to prevent process from being killed)
+static ARIA2_PROCESS: Mutex<Option<tauri_plugin_shell::process::CommandChild>> = Mutex::const_new(None);
 
 /// Initialize aria2 engine
 pub async fn init_engine(app: &AppHandle) -> Result<()> {
@@ -144,12 +151,16 @@ async fn start_aria2_process(app: &AppHandle, port: u16, secret: &str) -> Result
     ];
 
     // Spawn aria2c process
-    let (mut _rx, _child) = shell
+    let (mut _rx, child) = shell
         .sidecar("aria2c")
         .map_err(|e| Error::Custom(format!("Failed to create aria2c sidecar: {}", e)))?
         .args(&args)
         .spawn()
         .map_err(|e| Error::Custom(format!("Failed to spawn aria2c: {}", e)))?;
+
+    // Store child process globally to keep it alive (dropping CommandChild kills the process)
+    let mut process_guard = ARIA2_PROCESS.lock().await;
+    *process_guard = Some(child);
 
     tracing::info!("Aria2 process started");
     Ok(())
@@ -184,7 +195,7 @@ impl Aria2Client {
                 tokio::select! {
                     // Handle outgoing requests
                     Some(req) = rx.recv() => {
-                        let id = uuid::Uuid::new_v4().as_u128() as u64;
+                        let id = RPC_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
                         let msg = json!({
                             "jsonrpc": "2.0",
                             "id": id,
@@ -196,6 +207,10 @@ impl Aria2Client {
 
                         if let Err(e) = write.send(Message::Text(msg.to_string())).await {
                             tracing::error!("Failed to send message: {}", e);
+                            // Remove pending request and send error back so caller doesn't hang
+                            if let Some(tx) = pending.remove(&id) {
+                                let _ = tx.send(Err(Error::Aria2Rpc(format!("WebSocket send failed: {}", e))));
+                            }
                         }
                     }
                     // Handle incoming responses and notifications
@@ -312,8 +327,11 @@ impl Aria2Client {
             .await
             .map_err(|_| Error::Aria2Rpc("Failed to send request".to_string()))?;
 
-        rx.await
-            .map_err(|_| Error::Aria2Rpc("Failed to receive response".to_string()))?
+        // Add timeout to prevent hanging forever if WebSocket connection is broken
+        match tokio::time::timeout(tokio::time::Duration::from_secs(30), rx).await {
+            Ok(result) => result.map_err(|_| Error::Aria2Rpc("Failed to receive response".to_string()))?,
+            Err(_) => Err(Error::Aria2Rpc("RPC call timed out".to_string())),
+        }
     }
 
     /// Add URI download

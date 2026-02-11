@@ -269,6 +269,24 @@ pub async fn fetch_tracker_list(sources: Vec<String>) -> Result<Vec<String>> {
     Ok(all_trackers)
 }
 
+/// Delete local files for a task
+#[tauri::command]
+pub async fn delete_task_files(file_paths: Vec<String>) -> Result<()> {
+    for path in &file_paths {
+        let p = std::path::Path::new(path);
+        if p.exists() {
+            if p.is_dir() {
+                std::fs::remove_dir_all(p)
+                    .map_err(|e| Error::Custom(format!("Failed to delete directory {}: {}", path, e)))?;
+            } else {
+                std::fs::remove_file(p)
+                    .map_err(|e| Error::Custom(format!("Failed to delete file {}: {}", path, e)))?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Update tray menu labels for i18n
 #[tauri::command]
 pub async fn update_tray_menu(app: tauri::AppHandle, labels: TrayLabels) -> Result<()> {
