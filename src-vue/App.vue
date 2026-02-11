@@ -3,6 +3,7 @@ import { onMounted, ref, provide } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useTheme } from '@/composables/useTheme'
 import { useAria2Events } from '@/composables/useAria2Events'
+import { useUpdater } from '@/composables/useUpdater'
 import { listen } from '@tauri-apps/api/event'
 import TitleBar from '@/components/TitleBar.vue'
 import Sidebar from '@/components/Sidebar.vue'
@@ -19,6 +20,9 @@ provide('showAddDialog', showAddDialog)
 
 // Setup aria2 event listener
 useAria2Events()
+
+// Auto-check for updates (delayed, silent)
+const { checkForUpdate } = useUpdater()
 
 // Handle incoming URLs from CLI args, second instance, or deep links
 function handleIncomingUrls(urls: string[]) {
@@ -60,6 +64,9 @@ onMounted(async () => {
       }).catch((e: unknown) => console.warn('Deep link registration failed:', e))
     })
     .catch((e) => console.warn('Deep link not available:', e))
+
+  // Auto-check for updates after 5 seconds
+  setTimeout(() => checkForUpdate(true), 5000)
 })
 </script>
 

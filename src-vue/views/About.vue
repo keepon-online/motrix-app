@@ -4,10 +4,12 @@ import { useI18n } from 'vue-i18n'
 import { open } from '@tauri-apps/plugin-shell'
 import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
+import { useUpdater } from '@/composables/useUpdater'
 
 const { t } = useI18n()
 const appVersion = ref('')
 const aria2Version = ref('')
+const { status, newVersion, downloadProgress, errorMessage, checkForUpdate, installAndRelaunch } = useUpdater()
 
 onMounted(async () => {
   try {
@@ -32,6 +34,38 @@ onMounted(async () => {
 
     <h1 class="about-title">{{ t('app.name') }}</h1>
     <p class="about-version">{{ t('app.version', { version: appVersion }) }}</p>
+
+    <div class="about-update">
+      <el-button
+        v-if="status === 'idle' || status === 'upToDate' || status === 'error'"
+        size="small"
+        @click="checkForUpdate()"
+        :loading="status === 'checking'"
+      >
+        {{ status === 'upToDate' ? t('about.upToDate') : t('about.checkUpdate') }}
+      </el-button>
+      <el-button
+        v-else-if="status === 'checking'"
+        size="small"
+        loading
+      >
+        {{ t('about.checking') }}
+      </el-button>
+      <div v-else-if="status === 'downloading'" class="update-progress">
+        <span>{{ t('about.downloading', { version: newVersion }) }}</span>
+        <el-progress :percentage="downloadProgress" :stroke-width="6" style="width: 200px" />
+      </div>
+      <el-button
+        v-else-if="status === 'ready'"
+        size="small"
+        type="primary"
+        @click="installAndRelaunch()"
+      >
+        {{ t('about.installAndRestart') }}
+      </el-button>
+      <p v-if="status === 'error'" class="update-error">{{ errorMessage }}</p>
+    </div>
+
     <p class="about-description">{{ t('app.description') }}</p>
 
     <div class="about-tech">
@@ -100,6 +134,25 @@ onMounted(async () => {
   font-size: 14px;
   color: var(--el-text-color-secondary);
   margin: 0 0 8px;
+}
+
+.about-update {
+  margin-bottom: 8px;
+
+  .update-progress {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--el-text-color-secondary);
+  }
+
+  .update-error {
+    font-size: 12px;
+    color: var(--el-color-danger);
+    margin: 4px 0 0;
+  }
 }
 
 .about-description {

@@ -200,6 +200,11 @@ export default {
     website: 'Website',
     github: 'GitHub',
     releases: 'Releases',
+    checkUpdate: 'Check for Updates',
+    checking: 'Checking...',
+    upToDate: 'Up to Date',
+    downloading: 'Downloading v{version}...',
+    installAndRestart: 'Install & Restart',
   },
   tray: {
     show: 'Show Motrix',

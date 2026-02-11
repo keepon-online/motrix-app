@@ -200,6 +200,11 @@ export default {
     website: '官网',
     github: 'GitHub',
     releases: '版本发布',
+    checkUpdate: '检查更新',
+    checking: '检查中...',
+    upToDate: '已是最新版本',
+    downloading: '正在下载 v{version}...',
+    installAndRestart: '安装并重启',
   },
   tray: {
     show: '显示 Motrix',
