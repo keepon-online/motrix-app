@@ -31,7 +31,7 @@ onMounted(async () => {
     </div>
 
     <h1 class="about-title">{{ t('app.name') }}</h1>
-    <p class="about-version">v{{ appVersion }}</p>
+    <p class="about-version">{{ t('app.version', { version: appVersion }) }}</p>
     <p class="about-description">{{ t('app.description') }}</p>
 
     <div class="about-tech">

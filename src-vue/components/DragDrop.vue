@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
 import { useAppStore } from '@/stores/app'
 import { ElMessage } from 'element-plus'
+import { decodeThunderUrl } from '@/utils'
 
 const { t } = useI18n()
 const taskStore = useTaskStore()
@@ -56,7 +57,7 @@ async function handleDrop(e: DragEvent) {
   // Handle dropped text (URLs)
   const text = e.dataTransfer.getData('text/plain')
   if (text) {
-    const urls = text.split('\n').map(u => u.trim()).filter(u => isUrl(u))
+    const urls = text.split('\n').map(u => u.trim()).filter(u => isUrl(u)).map(u => decodeThunderUrl(u))
     if (urls.length > 0) {
       try {
         for (const url of urls) {

@@ -10,6 +10,7 @@ export default {
   nav: {
     downloads: '下载中',
     waiting: '等待中',
+    stopped: '已停止',
     completed: '已完成',
     settings: '设置',
     about: '关于',

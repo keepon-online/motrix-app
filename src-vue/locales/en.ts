@@ -10,6 +10,7 @@ export default {
   nav: {
     downloads: 'Downloads',
     waiting: 'Waiting',
+    stopped: 'Stopped',
     completed: 'Completed',
     settings: 'Settings',
     about: 'About',

@@ -98,13 +98,33 @@ export function useAria2Events() {
     }
   }
 
+  let unlistenConnection: UnlistenFn | null = null
+
+  async function setupConnectionListener() {
+    try {
+      unlistenConnection = await listen<string>('aria2-connection', (event) => {
+        if (event.payload === 'connected') {
+          // Refresh all task lists after reconnection
+          taskStore.fetchTasks()
+          taskStore.fetchGlobalStat()
+        }
+      })
+    } catch {
+      // ignore
+    }
+  }
+
   onMounted(() => {
     setupEventListener()
+    setupConnectionListener()
   })
 
   onUnmounted(() => {
     if (unlisten) {
       unlisten()
+    }
+    if (unlistenConnection) {
+      unlistenConnection()
     }
   })
 

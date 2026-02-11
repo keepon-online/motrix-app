@@ -77,10 +77,6 @@ export const useTaskStore = defineStore('task', () => {
     tasks.value.filter((t) => t.status === 'active' || t.status === 'waiting')
   )
 
-  const completedTasks = computed(() =>
-    tasks.value.filter((t) => t.status === 'complete')
-  )
-
   const downloadSpeed = computed(() => {
     return tasks.value.reduce((sum, t) => sum + parseInt(t.downloadSpeed || '0'), 0)
   })
@@ -356,7 +352,6 @@ export const useTaskStore = defineStore('task', () => {
     // Getters
     filteredTasks,
     activeTasks,
-    completedTasks,
     downloadSpeed,
     uploadSpeed,
     // Actions

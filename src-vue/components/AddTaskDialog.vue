@@ -7,7 +7,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage } from 'element-plus'
-import { formatBytes } from '@/utils'
+import { formatBytes, decodeThunderUrl } from '@/utils'
 
 interface TorrentFileInfo {
   index: number
@@ -171,6 +171,7 @@ async function submit() {
         .split('\n')
         .map((u) => u.trim())
         .filter((u) => u.length > 0)
+        .map((u) => decodeThunderUrl(u))
 
       if (uris.length === 0) return
 

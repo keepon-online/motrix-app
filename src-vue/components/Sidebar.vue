@@ -45,7 +45,7 @@ const numStopped = computed(() => parseInt(taskStore.globalStat?.numStopped ?? '
 const menuItems = computed(() => [
   { path: '/tasks/active', icon: 'Download', label: t('nav.downloads'), badge: numActive.value },
   { path: '/tasks/waiting', icon: 'Clock', label: t('nav.waiting'), badge: numWaiting.value },
-  { path: '/tasks/stopped', icon: 'Finished', label: t('nav.completed'), badge: numStopped.value },
+  { path: '/tasks/stopped', icon: 'Finished', label: t('nav.stopped'), badge: numStopped.value },
 ])
 
 const isActive = (path: string) => {

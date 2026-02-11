@@ -243,6 +243,7 @@ impl Aria2Client {
                             }
                             Err(e) => {
                                 tracing::error!("WebSocket error: {}, attempting reconnect...", e);
+                                let _ = event_app_handle.emit("aria2-connection", "disconnected");
                                 // Fail all pending requests
                                 for (_, tx) in pending.drain() {
                                     let _ = tx.send(Err(Error::Aria2Rpc("WebSocket disconnected".to_string())));
@@ -257,6 +258,7 @@ impl Aria2Client {
                                             write = new_write;
                                             read = new_read;
                                             tracing::info!("WebSocket reconnected on attempt {}", attempt);
+                                            let _ = event_app_handle.emit("aria2-connection", "connected");
                                             reconnected = true;
                                             break;
                                         }
@@ -463,11 +465,6 @@ impl Aria2Client {
             .ok_or_else(|| Error::Aria2Rpc("Invalid response".to_string()))
     }
 
-    /// Force pause all tasks
-    pub async fn force_pause_all(&self) -> Result<Value> {
-        self.call("forcePauseAll", vec![]).await
-    }
-
     /// Force remove a task
     pub async fn force_remove(&self, gid: &str) -> Result<String> {
         let result = self.call("forceRemove", vec![json!(gid)]).await?;
@@ -487,50 +484,9 @@ impl Aria2Client {
         self.call("getPeers", vec![json!(gid)]).await
     }
 
-    /// Get global options
-    pub async fn get_global_option(&self) -> Result<Value> {
-        self.call("getGlobalOption", vec![]).await
-    }
-
-    /// Get task-specific options
-    pub async fn get_option(&self, gid: &str) -> Result<Value> {
-        self.call("getOption", vec![json!(gid)]).await
-    }
-
     /// Change task-specific options
     pub async fn change_option(&self, gid: &str, options: Value) -> Result<Value> {
         self.call("changeOption", vec![json!(gid), options]).await
-    }
-
-    /// Batch call multiple RPC methods (multicall)
-    pub async fn multicall(&self, methods: Vec<(String, Vec<Value>)>) -> Result<Value> {
-        let params: Vec<Value> = methods
-            .into_iter()
-            .map(|(method, params)| {
-                let mut full_params = vec![json!(format!("token:{}", self.secret))];
-                full_params.extend(params);
-                json!({
-                    "methodName": format!("aria2.{}", method),
-                    "params": full_params
-                })
-            })
-            .collect();
-
-        // multicall is a system method, not aria2 namespace
-        let (tx, rx) = oneshot::channel();
-        let request = RpcRequest {
-            method: "system.multicall".to_string(),
-            params: vec![json!(params)],
-            response_tx: tx,
-        };
-
-        self.sender
-            .send(request)
-            .await
-            .map_err(|_| Error::Aria2Rpc("Failed to send request".to_string()))?;
-
-        rx.await
-            .map_err(|_| Error::Aria2Rpc("Failed to receive response".to_string()))?
     }
 
     /// Shutdown aria2
