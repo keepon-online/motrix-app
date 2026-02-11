@@ -5,7 +5,20 @@ import { useTaskStore } from '@/stores/task'
 import { useAppStore } from '@/stores/app'
 import { open } from '@tauri-apps/plugin-dialog'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
+import { invoke } from '@tauri-apps/api/core'
 import { ElMessage } from 'element-plus'
+
+interface TorrentFileInfo {
+  index: number
+  path: string
+  length: number
+}
+
+interface TorrentInfo {
+  name: string
+  comment: string
+  files: TorrentFileInfo[]
+}
 
 const { t } = useI18n()
 const visible = defineModel<boolean>({ default: false })
@@ -17,6 +30,8 @@ const activeTab = ref<'uri' | 'torrent'>('uri')
 const uriInput = ref('')
 const torrentFile = ref<string | null>(null)
 const torrentFileName = ref('')
+const torrentInfo = ref<TorrentInfo | null>(null)
+const selectedFileIndices = ref<number[]>([])
 const showAdvanced = ref(false)
 
 // Options
@@ -38,6 +53,11 @@ const canSubmit = computed(() => {
   return torrentFile.value !== null
 })
 
+const allFilesSelected = computed(() => {
+  if (!torrentInfo.value) return false
+  return selectedFileIndices.value.length === torrentInfo.value.files.length
+})
+
 // Auto-detect clipboard content when dialog opens
 watch(visible, async (val) => {
   if (val) {
@@ -54,7 +74,14 @@ watch(visible, async (val) => {
 })
 
 function isUrl(text: string): boolean {
-  return /^(https?|ftp|magnet|thunder):\/?\/?/i.test(text)
+  return /^(https?|ftp|magnet|thunder):\/?\/?\S/i.test(text)
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + units[i]
 }
 
 async function selectTorrent() {
@@ -64,10 +91,43 @@ async function selectTorrent() {
   })
 
   if (selected) {
+    const filePath = selected as string
+    torrentFileName.value = filePath.split('/').pop()?.split('\\').pop() || 'torrent'
+
+    // Read file for base64 (needed by aria2 addTorrent)
     const { readFile } = await import('@tauri-apps/plugin-fs')
-    const contents = await readFile(selected as string)
+    const contents = await readFile(filePath)
     torrentFile.value = btoa(String.fromCharCode(...contents))
-    torrentFileName.value = (selected as string).split('/').pop() || 'torrent'
+
+    // Parse torrent to get file list
+    try {
+      const info = await invoke<TorrentInfo>('parse_torrent_file', { filePath })
+      torrentInfo.value = info
+      // Select all files by default
+      selectedFileIndices.value = info.files.map(f => f.index)
+    } catch (e) {
+      console.warn('Failed to parse torrent:', e)
+      torrentInfo.value = null
+      selectedFileIndices.value = []
+    }
+  }
+}
+
+function toggleAllFiles() {
+  if (!torrentInfo.value) return
+  if (allFilesSelected.value) {
+    selectedFileIndices.value = []
+  } else {
+    selectedFileIndices.value = torrentInfo.value.files.map(f => f.index)
+  }
+}
+
+function toggleFile(index: number) {
+  const idx = selectedFileIndices.value.indexOf(index)
+  if (idx >= 0) {
+    selectedFileIndices.value.splice(idx, 1)
+  } else {
+    selectedFileIndices.value.push(index)
   }
 }
 
@@ -117,6 +177,16 @@ async function submit() {
         await taskStore.addUri([uri], options)
       }
     } else if (torrentFile.value) {
+      // Add select-file option if user has deselected some files
+      if (torrentInfo.value && selectedFileIndices.value.length > 0
+          && selectedFileIndices.value.length < torrentInfo.value.files.length) {
+        // aria2 select-file uses 1-based indices
+        const indices = selectedFileIndices.value
+          .map(i => i + 1)
+          .sort((a, b) => a - b)
+          .join(',')
+        options['select-file'] = indices
+      }
       await taskStore.addTorrent(torrentFile.value, options)
     }
 
@@ -132,6 +202,8 @@ function resetForm() {
   uriInput.value = ''
   torrentFile.value = null
   torrentFileName.value = ''
+  torrentInfo.value = null
+  selectedFileIndices.value = []
   fileName.value = ''
   userAgent.value = ''
   referer.value = ''
@@ -170,6 +242,35 @@ function handleClose() {
             {{ t('dialog.selectTorrent') }}
           </el-button>
           <span v-if="torrentFileName" class="torrent-name">{{ torrentFileName }}</span>
+        </div>
+
+        <!-- Torrent file list -->
+        <div v-if="torrentInfo && torrentInfo.files.length > 1" class="torrent-files">
+          <div class="torrent-files-header">
+            <el-checkbox
+              :model-value="allFilesSelected"
+              :indeterminate="selectedFileIndices.length > 0 && !allFilesSelected"
+              @change="toggleAllFiles"
+            >
+              {{ t('task.selectAll') }}
+              ({{ selectedFileIndices.length }}/{{ torrentInfo.files.length }})
+            </el-checkbox>
+          </div>
+          <div class="torrent-files-list">
+            <div
+              v-for="file in torrentInfo.files"
+              :key="file.index"
+              class="torrent-file-item"
+            >
+              <el-checkbox
+                :model-value="selectedFileIndices.includes(file.index)"
+                @change="toggleFile(file.index)"
+              >
+                <span class="file-path">{{ file.path }}</span>
+                <span class="file-size">{{ formatFileSize(file.length) }}</span>
+              </el-checkbox>
+            </div>
+          </div>
         </div>
       </el-tab-pane>
     </el-tabs>
@@ -245,6 +346,44 @@ function handleClose() {
 
   .torrent-name {
     color: var(--el-text-color-secondary);
+  }
+}
+
+.torrent-files {
+  margin-top: 8px;
+}
+
+.torrent-files-header {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  margin-bottom: 4px;
+}
+
+.torrent-files-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.torrent-file-item {
+  padding: 4px 0;
+
+  .el-checkbox {
+    display: flex;
+    width: 100%;
+  }
+
+  .file-path {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-right: 8px;
+  }
+
+  .file-size {
+    color: var(--el-text-color-secondary);
+    font-size: 12px;
+    flex-shrink: 0;
   }
 }
 

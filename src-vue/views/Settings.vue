@@ -304,6 +304,27 @@ async function resetDefaults() {
           </div>
         </el-form-item>
 
+        <el-form-item :label="t('settings.btForceEncryption')">
+          <el-switch
+            :model-value="appStore.config?.btForceEncryption"
+            @change="(val: string | number | boolean) => appStore.saveConfig({ btForceEncryption: Boolean(val) })"
+          />
+        </el-form-item>
+
+        <el-form-item :label="t('settings.btRequireCrypto')">
+          <el-switch
+            :model-value="appStore.config?.btRequireCrypto"
+            @change="(val: string | number | boolean) => appStore.saveConfig({ btRequireCrypto: Boolean(val) })"
+          />
+        </el-form-item>
+
+        <el-form-item :label="t('settings.pauseMetadata')">
+          <el-switch
+            :model-value="appStore.config?.pauseMetadata"
+            @change="(val: string | number | boolean) => appStore.saveConfig({ pauseMetadata: Boolean(val) })"
+          />
+        </el-form-item>
+
         <!-- Proxy Settings -->
         <h3 class="settings-section">{{ t('settings.proxy') }}</h3>
 
@@ -360,6 +381,14 @@ async function resetDefaults() {
               @change="(val: string) => appStore.saveConfig({ proxyPassword: val })"
             />
           </el-form-item>
+
+          <el-form-item :label="t('settings.noProxy')">
+            <el-input
+              :model-value="appStore.config?.noProxy"
+              :placeholder="t('settings.noProxyPlaceholder')"
+              @change="(val: string) => appStore.saveConfig({ noProxy: val })"
+            />
+          </el-form-item>
         </template>
 
         <!-- Advanced Settings -->
@@ -371,6 +400,38 @@ async function resetDefaults() {
             placeholder="Motrix/2.0.0"
             @change="(val: string) => appStore.saveConfig({ userAgent: val })"
           />
+        </el-form-item>
+
+        <el-form-item :label="t('settings.allowOverwrite')">
+          <el-switch
+            :model-value="appStore.config?.allowOverwrite"
+            @change="(val: string | number | boolean) => appStore.saveConfig({ allowOverwrite: Boolean(val) })"
+          />
+        </el-form-item>
+
+        <el-form-item :label="t('settings.autoFileRenaming')">
+          <el-switch
+            :model-value="appStore.config?.autoFileRenaming"
+            @change="(val: string | number | boolean) => appStore.saveConfig({ autoFileRenaming: Boolean(val) })"
+          />
+        </el-form-item>
+
+        <el-form-item :label="t('settings.continueDownload')">
+          <el-switch
+            :model-value="appStore.config?.continueDownload"
+            @change="(val: string | number | boolean) => appStore.saveConfig({ continueDownload: Boolean(val) })"
+          />
+        </el-form-item>
+
+        <el-form-item :label="t('settings.followMetalink')">
+          <el-select
+            :model-value="appStore.config?.followMetalink"
+            @change="(val: string) => appStore.saveConfig({ followMetalink: val })"
+          >
+            <el-option label="true" value="true" />
+            <el-option label="false" value="false" />
+            <el-option label="mem" value="mem" />
+          </el-select>
         </el-form-item>
 
         <el-form-item :label="t('settings.rpcPort')">
@@ -416,6 +477,13 @@ async function resetDefaults() {
           <el-switch
             :model-value="appStore.config?.autoClearCompleted"
             @change="(val: string | number | boolean) => appStore.saveConfig({ autoClearCompleted: Boolean(val) })"
+          />
+        </el-form-item>
+
+        <el-form-item :label="t('settings.resumeAllWhenAppLaunched')">
+          <el-switch
+            :model-value="appStore.config?.resumeAllWhenAppLaunched"
+            @change="(val: string | number | boolean) => appStore.saveConfig({ resumeAllWhenAppLaunched: Boolean(val) })"
           />
         </el-form-item>
       </el-form>

@@ -287,6 +287,102 @@ pub async fn delete_task_files(file_paths: Vec<String>) -> Result<()> {
     Ok(())
 }
 
+/// Parse a torrent file and return file list info
+#[tauri::command]
+pub async fn parse_torrent_file(file_path: String) -> Result<Value> {
+    let data = std::fs::read(&file_path)
+        .map_err(|e| Error::Custom(format!("Failed to read torrent file: {}", e)))?;
+
+    let torrent: serde_bencode::value::Value = serde_bencode::from_bytes(&data)
+        .map_err(|e| Error::Custom(format!("Failed to parse torrent: {}", e)))?;
+
+    let dict = match &torrent {
+        serde_bencode::value::Value::Dict(d) => d,
+        _ => return Err(Error::Custom("Invalid torrent format".to_string())),
+    };
+
+    let info = dict.get(&b"info".to_vec())
+        .ok_or_else(|| Error::Custom("Missing info dictionary".to_string()))?;
+
+    let info_dict = match info {
+        serde_bencode::value::Value::Dict(d) => d,
+        _ => return Err(Error::Custom("Invalid info dictionary".to_string())),
+    };
+
+    let name = info_dict.get(&b"name".to_vec())
+        .and_then(|v| match v {
+            serde_bencode::value::Value::Bytes(b) => String::from_utf8(b.clone()).ok(),
+            _ => None,
+        })
+        .unwrap_or_default();
+
+    let comment = dict.get(&b"comment".to_vec())
+        .and_then(|v| match v {
+            serde_bencode::value::Value::Bytes(b) => String::from_utf8(b.clone()).ok(),
+            _ => None,
+        })
+        .unwrap_or_default();
+
+    let mut files = Vec::new();
+
+    if let Some(files_val) = info_dict.get(&b"files".to_vec()) {
+        // Multi-file torrent
+        if let serde_bencode::value::Value::List(file_list) = files_val {
+            for (index, file_entry) in file_list.iter().enumerate() {
+                if let serde_bencode::value::Value::Dict(file_dict) = file_entry {
+                    let length = file_dict.get(&b"length".to_vec())
+                        .and_then(|v| match v {
+                            serde_bencode::value::Value::Int(n) => Some(*n),
+                            _ => None,
+                        })
+                        .unwrap_or(0);
+
+                    let path = file_dict.get(&b"path".to_vec())
+                        .and_then(|v| match v {
+                            serde_bencode::value::Value::List(parts) => {
+                                let path_parts: Vec<String> = parts.iter()
+                                    .filter_map(|p| match p {
+                                        serde_bencode::value::Value::Bytes(b) => String::from_utf8(b.clone()).ok(),
+                                        _ => None,
+                                    })
+                                    .collect();
+                                Some(path_parts.join("/"))
+                            }
+                            _ => None,
+                        })
+                        .unwrap_or_default();
+
+                    files.push(serde_json::json!({
+                        "index": index,
+                        "path": path,
+                        "length": length,
+                    }));
+                }
+            }
+        }
+    } else {
+        // Single file torrent
+        let length = info_dict.get(&b"length".to_vec())
+            .and_then(|v| match v {
+                serde_bencode::value::Value::Int(n) => Some(*n),
+                _ => None,
+            })
+            .unwrap_or(0);
+
+        files.push(serde_json::json!({
+            "index": 0,
+            "path": name.clone(),
+            "length": length,
+        }));
+    }
+
+    Ok(serde_json::json!({
+        "name": name,
+        "comment": comment,
+        "files": files,
+    }))
+}
+
 /// Update tray menu labels for i18n
 #[tauri::command]
 pub async fn update_tray_menu(app: tauri::AppHandle, labels: TrayLabels) -> Result<()> {
