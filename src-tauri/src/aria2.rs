@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 /// Aria2 event types
@@ -58,6 +58,9 @@ struct RpcRequest {
 
 /// Global aria2 client instance
 static ARIA2_CLIENT: RwLock<Option<Arc<Aria2Client>>> = RwLock::const_new(None);
+
+/// Global aria2 child process handle (must be kept alive to prevent process from being killed)
+static ARIA2_PROCESS: Mutex<Option<tauri_plugin_shell::process::CommandChild>> = Mutex::const_new(None);
 
 /// Initialize aria2 engine
 pub async fn init_engine(app: &AppHandle) -> Result<()> {
@@ -144,12 +147,16 @@ async fn start_aria2_process(app: &AppHandle, port: u16, secret: &str) -> Result
     ];
 
     // Spawn aria2c process
-    let (mut _rx, _child) = shell
+    let (mut _rx, child) = shell
         .sidecar("aria2c")
         .map_err(|e| Error::Custom(format!("Failed to create aria2c sidecar: {}", e)))?
         .args(&args)
         .spawn()
         .map_err(|e| Error::Custom(format!("Failed to spawn aria2c: {}", e)))?;
+
+    // Store child process globally to keep it alive (dropping CommandChild kills the process)
+    let mut process_guard = ARIA2_PROCESS.lock().await;
+    *process_guard = Some(child);
 
     tracing::info!("Aria2 process started");
     Ok(())
