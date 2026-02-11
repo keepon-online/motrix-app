@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
 import { ElMessageBox, ElCheckbox } from 'element-plus'
+import { Search, SortUp, SortDown } from '@element-plus/icons-vue'
 import TaskItem from '@/components/TaskItem.vue'
 import TaskToolbar from '@/components/TaskToolbar.vue'
 import TaskDetail from '@/components/TaskDetail.vue'
@@ -160,6 +161,37 @@ onUnmounted(() => {
         {{ pageTitle }}
       </h2>
       <div class="tasks-actions">
+        <el-input
+          v-model="taskStore.searchQuery"
+          :placeholder="t('task.search')"
+          clearable
+          size="small"
+          style="width: 200px; margin-right: 8px"
+          :prefix-icon="Search"
+        />
+        <el-select
+          v-model="taskStore.sortField"
+          size="small"
+          style="width: 120px; margin-right: 8px"
+        >
+          <el-option :label="t('task.sortDefault')" value="default" />
+          <el-option :label="t('task.sortName')" value="name" />
+          <el-option :label="t('task.sortSize')" value="size" />
+          <el-option :label="t('task.sortProgress')" value="progress" />
+          <el-option :label="t('task.sortSpeed')" value="speed" />
+        </el-select>
+        <el-button
+          v-if="taskStore.sortField !== 'default'"
+          size="small"
+          circle
+          @click="taskStore.sortOrder = taskStore.sortOrder === 'asc' ? 'desc' : 'asc'"
+          style="margin-right: 8px"
+        >
+          <el-icon>
+            <SortUp v-if="taskStore.sortOrder === 'asc'" />
+            <SortDown v-else />
+          </el-icon>
+        </el-button>
         <el-button
           v-if="route.params.status === 'stopped' && taskStore.tasks.length > 0"
           @click="taskStore.purgeTaskRecords()"
@@ -174,12 +206,12 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <TaskToolbar v-if="taskStore.tasks.length > 0" @remove-selected="confirmRemoveSelected" />
+    <TaskToolbar v-if="taskStore.filteredTasks.length > 0" @remove-selected="confirmRemoveSelected" />
 
     <div class="tasks-list">
-      <template v-if="taskStore.tasks.length > 0">
+      <template v-if="taskStore.filteredTasks.length > 0">
         <TaskItem
-          v-for="task in taskStore.tasks"
+          v-for="task in taskStore.filteredTasks"
           :key="task.gid"
           :task="task"
           :selected="taskStore.selectedGids.includes(task.gid)"

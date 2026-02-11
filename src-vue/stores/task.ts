@@ -4,6 +4,8 @@ import type { Task, GlobalStat, AddTaskOptions } from '@/types'
 import { invoke } from '@tauri-apps/api/core'
 
 export type TaskListType = 'active' | 'waiting' | 'stopped'
+export type SortField = 'name' | 'size' | 'progress' | 'speed' | 'default'
+export type SortOrder = 'asc' | 'desc'
 
 export const useTaskStore = defineStore('task', () => {
   // State
@@ -14,8 +16,63 @@ export const useTaskStore = defineStore('task', () => {
   const detailVisible = ref(false)
   const globalStat = ref<GlobalStat | null>(null)
   const loading = ref(false)
+  const searchQuery = ref('')
+  const sortField = ref<SortField>('default')
+  const sortOrder = ref<SortOrder>('asc')
 
   // Getters
+  const filteredTasks = computed(() => {
+    let result = [...tasks.value]
+
+    // Search filter
+    if (searchQuery.value.trim()) {
+      const query = searchQuery.value.trim().toLowerCase()
+      result = result.filter(t => {
+        // Match by file name
+        const fileName = t.bittorrent?.info?.name
+          || t.files?.[0]?.path?.split('/').pop()?.split('\\').pop()
+          || ''
+        if (fileName.toLowerCase().includes(query)) return true
+        // Match by URL
+        const uri = t.files?.[0]?.uris?.[0]?.uri || ''
+        if (uri.toLowerCase().includes(query)) return true
+        return false
+      })
+    }
+
+    // Sort
+    if (sortField.value !== 'default') {
+      result.sort((a, b) => {
+        let cmp = 0
+        switch (sortField.value) {
+          case 'name': {
+            const nameA = (a.bittorrent?.info?.name || a.files?.[0]?.path || '').toLowerCase()
+            const nameB = (b.bittorrent?.info?.name || b.files?.[0]?.path || '').toLowerCase()
+            cmp = nameA.localeCompare(nameB)
+            break
+          }
+          case 'size':
+            cmp = parseInt(a.totalLength || '0') - parseInt(b.totalLength || '0')
+            break
+          case 'progress': {
+            const pA = parseInt(a.totalLength || '0') > 0
+              ? parseInt(a.completedLength || '0') / parseInt(a.totalLength || '1') : 0
+            const pB = parseInt(b.totalLength || '0') > 0
+              ? parseInt(b.completedLength || '0') / parseInt(b.totalLength || '1') : 0
+            cmp = pA - pB
+            break
+          }
+          case 'speed':
+            cmp = parseInt(a.downloadSpeed || '0') - parseInt(b.downloadSpeed || '0')
+            break
+        }
+        return sortOrder.value === 'desc' ? -cmp : cmp
+      })
+    }
+
+    return result
+  })
+
   const activeTasks = computed(() =>
     tasks.value.filter((t) => t.status === 'active' || t.status === 'waiting')
   )
@@ -195,19 +252,30 @@ export const useTaskStore = defineStore('task', () => {
 
   // Batch operations
   async function pauseSelectedTasks() {
-    for (const gid of selectedGids.value) {
-      await pauseTask(gid)
-    }
+    const gids = [...selectedGids.value]
+    await Promise.all(gids.map(gid => {
+      const task = tasks.value.find(t => t.gid === gid)
+      const isBT = task?.bittorrent !== undefined
+      return invoke(isBT ? 'force_pause_task' : 'pause_task', { gid }).catch(e =>
+        console.error(`Failed to pause ${gid}:`, e)
+      )
+    }))
+    await fetchTasks()
   }
 
   async function resumeSelectedTasks() {
-    for (const gid of selectedGids.value) {
-      await resumeTask(gid)
-    }
+    const gids = [...selectedGids.value]
+    await Promise.all(gids.map(gid =>
+      invoke('resume_task', { gid }).catch(e =>
+        console.error(`Failed to resume ${gid}:`, e)
+      )
+    ))
+    await fetchTasks()
   }
 
   async function removeSelectedTasks(deleteFiles = false) {
-    for (const gid of selectedGids.value) {
+    const gids = [...selectedGids.value]
+    for (const gid of gids) {
       await removeTask(gid, deleteFiles)
     }
     clearSelection()
@@ -262,7 +330,11 @@ export const useTaskStore = defineStore('task', () => {
     detailVisible,
     globalStat,
     loading,
+    searchQuery,
+    sortField,
+    sortOrder,
     // Getters
+    filteredTasks,
     activeTasks,
     completedTasks,
     downloadSpeed,

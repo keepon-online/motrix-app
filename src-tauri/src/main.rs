@@ -37,6 +37,7 @@ fn main() {
             }
         }))
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_notification::init())
@@ -98,6 +99,7 @@ fn main() {
             commands::save_app_config,
             commands::add_uri,
             commands::add_torrent,
+            commands::add_torrent_file,
             commands::pause_task,
             commands::resume_task,
             commands::remove_task,

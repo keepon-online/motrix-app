@@ -46,6 +46,17 @@ pub async fn add_torrent(torrent: String, options: Option<Value>) -> Result<Stri
     client.add_torrent(&torrent, options).await
 }
 
+/// Add torrent download task from file path (reads and base64-encodes on backend)
+#[tauri::command]
+pub async fn add_torrent_file(file_path: String, options: Option<Value>) -> Result<String> {
+    use base64::Engine;
+    let data = std::fs::read(&file_path)
+        .map_err(|e| Error::Custom(format!("Failed to read torrent file: {}", e)))?;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
+    let client = aria2::get_client().await?;
+    client.add_torrent(&b64, options).await
+}
+
 /// Pause a task
 #[tauri::command]
 pub async fn pause_task(gid: String) -> Result<String> {

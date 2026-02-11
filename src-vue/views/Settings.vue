@@ -87,6 +87,12 @@ async function updateTrackers() {
     const btTracker = trackers.join(',')
 
     await appStore.saveConfig({ btTracker })
+    // Sync bt-tracker to running aria2 engine
+    try {
+      await invoke('change_global_option', { options: { 'bt-tracker': btTracker } })
+    } catch (e) {
+      console.warn('Failed to sync bt-tracker to aria2:', e)
+    }
     ElMessage.success(t('settings.trackerCount', { count: trackers.length }))
   } catch {
     ElMessage.error(t('settings.trackerUpdateFailed'))
@@ -95,12 +101,28 @@ async function updateTrackers() {
   }
 }
 
+async function toggleAutoStart(val: string | number | boolean) {
+  const enabled = Boolean(val)
+  try {
+    const { enable, disable } = await import('@tauri-apps/plugin-autostart')
+    if (enabled) {
+      await enable()
+    } else {
+      await disable()
+    }
+    await appStore.saveConfig({ autoStart: enabled })
+  } catch (e) {
+    console.error('Failed to toggle autostart:', e)
+    ElMessage.error(String(e))
+  }
+}
+
 async function resetDefaults() {
   try {
     await ElMessageBox.confirm(
       t('settings.resetConfirm'),
       t('settings.resetDefaults'),
-      { confirmButtonText: t('dialog.add'), cancelButtonText: t('dialog.cancel'), type: 'warning' }
+      { confirmButtonText: t('settings.resetDefaults'), cancelButtonText: t('dialog.cancel'), type: 'warning' }
     )
     await appStore.resetConfig()
     ElMessage.success(t('settings.resetSuccess'))
@@ -213,6 +235,34 @@ async function resetDefaults() {
           <el-select
             :model-value="appStore.config?.maxUploadLimit"
             @change="(val: string) => appStore.saveConfig({ maxUploadLimit: val })"
+          >
+            <el-option
+              v-for="opt in speedOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item :label="t('settings.maxOverallDownloadLimit')">
+          <el-select
+            :model-value="appStore.config?.maxOverallDownloadLimit"
+            @change="(val: string) => appStore.saveConfig({ maxOverallDownloadLimit: val })"
+          >
+            <el-option
+              v-for="opt in speedOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item :label="t('settings.maxOverallUploadLimit')">
+          <el-select
+            :model-value="appStore.config?.maxOverallUploadLimit"
+            @change="(val: string) => appStore.saveConfig({ maxOverallUploadLimit: val })"
           >
             <el-option
               v-for="opt in speedOptions"
@@ -455,7 +505,7 @@ async function resetDefaults() {
         <el-form-item :label="t('settings.autoStart')">
           <el-switch
             :model-value="appStore.config?.autoStart"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ autoStart: Boolean(val) })"
+            @change="toggleAutoStart"
           />
         </el-form-item>
 

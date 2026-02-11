@@ -26,6 +26,10 @@ const routes: RouteRecordRaw[] = [
     name: 'About',
     component: () => import('@/views/About.vue'),
   },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/tasks/active',
+  },
 ]
 
 const router = createRouter({

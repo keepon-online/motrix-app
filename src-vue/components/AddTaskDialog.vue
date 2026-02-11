@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, inject, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
 import { useAppStore } from '@/stores/app'
@@ -26,9 +26,13 @@ const visible = defineModel<boolean>({ default: false })
 const taskStore = useTaskStore()
 const appStore = useAppStore()
 
+// Receive pending URLs from App.vue (CLI args, deep links, second instance)
+const pendingUrls = inject<Ref<string[]>>('pendingUrls', ref([]))
+
 const activeTab = ref<'uri' | 'torrent'>('uri')
 const uriInput = ref('')
 const torrentFile = ref<string | null>(null)
+const torrentFilePath = ref<string | null>(null)
 const torrentFileName = ref('')
 const torrentInfo = ref<TorrentInfo | null>(null)
 const selectedFileIndices = ref<number[]>([])
@@ -58,10 +62,16 @@ const allFilesSelected = computed(() => {
   return selectedFileIndices.value.length === torrentInfo.value.files.length
 })
 
-// Auto-detect clipboard content when dialog opens
+// Auto-detect clipboard content or consume pending URLs when dialog opens
 watch(visible, async (val) => {
   if (val) {
     downloadDir.value = appStore.downloadDir
+    // Consume pending URLs from CLI args / deep links / second instance
+    if (pendingUrls.value.length > 0) {
+      uriInput.value = pendingUrls.value.join('\n')
+      pendingUrls.value = []
+      return
+    }
     try {
       const clipText = await readText()
       if (clipText && isUrl(clipText.trim()) && !uriInput.value) {
@@ -93,11 +103,8 @@ async function selectTorrent() {
   if (selected) {
     const filePath = selected as string
     torrentFileName.value = filePath.split('/').pop()?.split('\\').pop() || 'torrent'
-
-    // Read file for base64 (needed by aria2 addTorrent)
-    const { readFile } = await import('@tauri-apps/plugin-fs')
-    const contents = await readFile(filePath)
-    torrentFile.value = btoa(String.fromCharCode(...contents))
+    torrentFilePath.value = filePath
+    torrentFile.value = filePath // mark as selected for canSubmit
 
     // Parse torrent to get file list
     try {
@@ -187,7 +194,7 @@ async function submit() {
           .join(',')
         options['select-file'] = indices
       }
-      await taskStore.addTorrent(torrentFile.value, options)
+      await invoke('add_torrent_file', { filePath: torrentFilePath.value, options })
     }
 
     resetForm()

@@ -9,18 +9,22 @@ const { t } = useI18n()
 const route = useRoute()
 const taskStore = useTaskStore()
 
+const numActive = computed(() => parseInt(taskStore.globalStat?.numActive ?? '0'))
+const numWaiting = computed(() => parseInt(taskStore.globalStat?.numWaiting ?? '0'))
+const numStopped = computed(() => parseInt(taskStore.globalStat?.numStopped ?? '0'))
+
 const menuItems = computed(() => [
-  { path: '/tasks/active', icon: 'Download', label: t('nav.downloads') },
-  { path: '/tasks/waiting', icon: 'Clock', label: t('nav.waiting') },
-  { path: '/tasks/stopped', icon: 'Finished', label: t('nav.completed') },
+  { path: '/tasks/active', icon: 'Download', label: t('nav.downloads'), badge: numActive.value },
+  { path: '/tasks/waiting', icon: 'Clock', label: t('nav.waiting'), badge: numWaiting.value },
+  { path: '/tasks/stopped', icon: 'Finished', label: t('nav.completed'), badge: numStopped.value },
 ])
 
 const isActive = (path: string) => {
   return route.path === path
 }
 
-const downloadSpeedText = computed(() => formatSpeed(taskStore.downloadSpeed))
-const uploadSpeedText = computed(() => formatSpeed(taskStore.uploadSpeed))
+const downloadSpeedText = computed(() => formatSpeed(taskStore.globalStat?.downloadSpeed ?? '0'))
+const uploadSpeedText = computed(() => formatSpeed(taskStore.globalStat?.uploadSpeed ?? '0'))
 </script>
 
 <template>
@@ -37,6 +41,7 @@ const uploadSpeedText = computed(() => formatSpeed(taskStore.uploadSpeed))
           <component :is="item.icon" />
         </el-icon>
         <span class="nav-label">{{ item.label }}</span>
+        <span v-if="item.badge > 0" class="nav-badge">{{ item.badge > 99 ? '99+' : item.badge }}</span>
       </router-link>
     </nav>
 
@@ -101,6 +106,24 @@ const uploadSpeedText = computed(() => formatSpeed(taskStore.uploadSpeed))
 
   .nav-label {
     font-size: 14px;
+    flex: 1;
+  }
+
+  .nav-badge {
+    font-size: 11px;
+    min-width: 18px;
+    height: 18px;
+    line-height: 18px;
+    text-align: center;
+    border-radius: 9px;
+    padding: 0 5px;
+    background: var(--el-color-primary);
+    color: #fff;
+    flex-shrink: 0;
+  }
+
+  &.active .nav-badge {
+    background: var(--el-color-primary);
   }
 }
 

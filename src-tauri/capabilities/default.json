@@ -49,6 +49,7 @@
     "os:allow-locale",
     "clipboard-manager:default",
     "clipboard-manager:allow-write-text",
-    "clipboard-manager:allow-read-text"
+    "clipboard-manager:allow-read-text",
+    "autostart:default"
   ]
 }

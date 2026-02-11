@@ -85,12 +85,24 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
     // Start aria2 process using config
     start_aria2_process(app, &config).await?;
 
-    // Wait for aria2 to start
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-    // Create client
-    let client = Aria2Client::new(app.clone(), port, secret).await?;
-    let client = Arc::new(client);
+    // Wait for aria2 to start, retry connection up to 10 times
+    let mut client = None;
+    for attempt in 1..=10 {
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        match Aria2Client::new(app.clone(), port, secret.clone()).await {
+            Ok(c) => {
+                client = Some(c);
+                break;
+            }
+            Err(e) => {
+                tracing::warn!("Aria2 connection attempt {}/10 failed: {}", attempt, e);
+                if attempt == 10 {
+                    return Err(e);
+                }
+            }
+        }
+    }
+    let client = Arc::new(client.unwrap());
 
     // Store globally
     let mut guard = ARIA2_CLIENT.write().await;
@@ -265,13 +277,27 @@ impl Aria2Client {
                 tracing::error!("Failed to emit aria2 event: {}", e);
             }
 
-            // Send system notification for download complete/error
+            // Send system notification for download complete/error (respecting config)
+            let notify_on_complete = {
+                use tauri_plugin_store::StoreExt;
+                app_handle
+                    .store("config.json")
+                    .ok()
+                    .and_then(|store| store.get("config"))
+                    .and_then(|v| v.get("notifyOnComplete").and_then(|v| v.as_bool()))
+                    .unwrap_or(true)
+            };
+
             match event_type {
                 Aria2EventType::DownloadComplete | Aria2EventType::BtDownloadComplete => {
-                    Self::send_notification(app_handle, "Download Complete", &format!("Task {} has completed", param.gid));
+                    if notify_on_complete {
+                        Self::send_notification(app_handle, "Download Complete", &format!("Task {} has completed", param.gid));
+                    }
                 }
                 Aria2EventType::DownloadError => {
-                    Self::send_notification(app_handle, "Download Error", &format!("Task {} encountered an error", param.gid));
+                    if notify_on_complete {
+                        Self::send_notification(app_handle, "Download Error", &format!("Task {} encountered an error", param.gid));
+                    }
                 }
                 _ => {}
             }
