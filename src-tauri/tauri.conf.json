@@ -26,7 +26,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' ws://127.0.0.1:* http://127.0.0.1:*; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; connect-src 'self' ws://127.0.0.1:* http://127.0.0.1:* https://github.com https://objects.githubusercontent.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
     }
   },
   "bundle": {
@@ -50,6 +50,11 @@
         "ext": ["torrent"],
         "mimeType": "application/x-bittorrent",
         "description": "Torrent File"
+      },
+      {
+        "ext": ["metalink", "meta4"],
+        "mimeType": "application/metalink+xml",
+        "description": "Metalink File"
       }
     ],
     "linux": {
@@ -78,8 +83,14 @@
     },
     "deep-link": {
       "desktop": {
-        "schemes": ["motrix", "magnet"]
+        "schemes": ["motrix", "magnet", "thunder"]
       }
+    },
+    "updater": {
+      "endpoints": [
+        "https://github.com/agalwood/Motrix/releases/latest/download/latest.json"
+      ],
+      "pubkey": ""
     }
   }
 }

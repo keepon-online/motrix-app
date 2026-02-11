@@ -130,12 +130,65 @@ async function resetDefaults() {
     // User cancelled
   }
 }
+
+async function exportConfig() {
+  try {
+    const { save } = await import('@tauri-apps/plugin-dialog')
+    const { writeTextFile } = await import('@tauri-apps/plugin-fs')
+    const filePath = await save({
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+      defaultPath: 'motrix-config.json',
+    })
+    if (filePath && appStore.config) {
+      await writeTextFile(filePath, JSON.stringify(appStore.config, null, 2))
+      ElMessage.success(t('settings.exportSuccess'))
+    }
+  } catch (e) {
+    console.error('Failed to export config:', e)
+    ElMessage.error(String(e))
+  }
+}
+
+async function importConfig() {
+  try {
+    const filePath = await open({
+      multiple: false,
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    })
+    if (filePath) {
+      const { readTextFile } = await import('@tauri-apps/plugin-fs')
+      const text = await readTextFile(filePath as string)
+      const parsed = JSON.parse(text)
+      // Validate required fields exist and have correct types
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        throw new Error('Invalid config format')
+      }
+      const requiredStrings = ['locale', 'theme', 'downloadDir']
+      for (const key of requiredStrings) {
+        if (key in parsed && typeof parsed[key] !== 'string') {
+          throw new Error(`Invalid type for ${key}`)
+        }
+      }
+      await appStore.saveConfig(parsed)
+      ElMessage.success(t('settings.importSuccess'))
+    }
+  } catch (e) {
+    console.error('Failed to import config:', e)
+    ElMessage.error(String(e))
+  }
+}
 </script>
 
 <template>
   <div class="settings-view">
     <div class="settings-header">
       <h2 class="settings-title">{{ t('settings.title') }}</h2>
+      <el-button size="small" @click="exportConfig">
+        {{ t('settings.export') }}
+      </el-button>
+      <el-button size="small" @click="importConfig">
+        {{ t('settings.import') }}
+      </el-button>
       <el-button size="small" @click="resetDefaults">
         <el-icon><RefreshRight /></el-icon>
         {{ t('settings.resetDefaults') }}
@@ -148,7 +201,7 @@ async function resetDefaults() {
         <h3 class="settings-section">{{ t('settings.basic') }}</h3>
 
         <el-form-item :label="t('settings.theme')">
-          <el-radio-group :model-value="appStore.config?.theme" @change="(val: any) => setTheme(val as 'auto' | 'light' | 'dark')">
+          <el-radio-group :model-value="appStore.config?.theme" @change="(val: string | number | boolean | undefined) => val && setTheme(val as 'auto' | 'light' | 'dark')">
             <el-radio-button value="auto">{{ t('settings.themeAuto') }}</el-radio-button>
             <el-radio-button value="light">{{ t('settings.themeLight') }}</el-radio-button>
             <el-radio-button value="dark">{{ t('settings.themeDark') }}</el-radio-button>
@@ -372,6 +425,34 @@ async function resetDefaults() {
           <el-switch
             :model-value="appStore.config?.pauseMetadata"
             @change="(val: string | number | boolean) => appStore.saveConfig({ pauseMetadata: Boolean(val) })"
+          />
+        </el-form-item>
+
+        <el-form-item :label="t('settings.btSaveMetadata')">
+          <el-switch
+            :model-value="appStore.config?.btSaveMetadata"
+            @change="(val: string | number | boolean) => appStore.saveConfig({ btSaveMetadata: Boolean(val) })"
+          />
+        </el-form-item>
+
+        <el-form-item :label="t('settings.btLoadSavedMetadata')">
+          <el-switch
+            :model-value="appStore.config?.btLoadSavedMetadata"
+            @change="(val: string | number | boolean) => appStore.saveConfig({ btLoadSavedMetadata: Boolean(val) })"
+          />
+        </el-form-item>
+
+        <el-form-item :label="t('settings.btRemoveUnselectedFile')">
+          <el-switch
+            :model-value="appStore.config?.btRemoveUnselectedFile"
+            @change="(val: string | number | boolean) => appStore.saveConfig({ btRemoveUnselectedFile: Boolean(val) })"
+          />
+        </el-form-item>
+
+        <el-form-item :label="t('settings.btDetachSeedOnly')">
+          <el-switch
+            :model-value="appStore.config?.btDetachSeedOnly"
+            @change="(val: string | number | boolean) => appStore.saveConfig({ btDetachSeedOnly: Boolean(val) })"
           />
         </el-form-item>
 

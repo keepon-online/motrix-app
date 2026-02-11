@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useResizeObserver } from '@vueuse/core'
 import { formatSpeed } from '@/utils'
 
 const { t } = useI18n()
@@ -14,6 +15,7 @@ const MAX_POINTS = 60
 const downloadHistory = ref<number[]>(new Array(MAX_POINTS).fill(0))
 const uploadHistory = ref<number[]>(new Array(MAX_POINTS).fill(0))
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+const chartContainerRef = ref<HTMLElement | null>(null)
 
 const currentDownload = computed(() => formatSpeed(props.downloadSpeed))
 const currentUpload = computed(() => formatSpeed(props.uploadSpeed))
@@ -124,6 +126,10 @@ onMounted(() => {
   drawChart()
 })
 
+useResizeObserver(chartContainerRef, () => {
+  drawChart()
+})
+
 onUnmounted(() => {
   if (interval) clearInterval(interval)
 })
@@ -143,7 +149,7 @@ onUnmounted(() => {
         <span class="legend-value">{{ currentUpload }}</span>
       </div>
     </div>
-    <div class="activity-chart">
+    <div ref="chartContainerRef" class="activity-chart">
       <canvas ref="canvasRef" class="chart-canvas"></canvas>
     </div>
   </div>

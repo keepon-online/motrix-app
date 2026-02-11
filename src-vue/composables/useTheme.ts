@@ -1,6 +1,6 @@
 import { useAppStore } from '@/stores/app'
-import { useDark, useToggle } from '@vueuse/core'
-import { watch } from 'vue'
+import { useDark } from '@vueuse/core'
+import { watch, onScopeDispose } from 'vue'
 
 export function useTheme() {
   const appStore = useAppStore()
@@ -10,30 +10,37 @@ export function useTheme() {
     valueDark: 'dark',
     valueLight: '',
   })
-  const toggleDark = useToggle(isDark)
 
-  function initTheme() {
-    if (!appStore.config) return
+  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
 
-    const theme = appStore.config.theme
+  function applyTheme(theme: string | undefined) {
     if (theme === 'dark') {
       isDark.value = true
     } else if (theme === 'light') {
       isDark.value = false
+    } else {
+      // 'auto' - follow system preference
+      isDark.value = mediaQuery.matches
     }
-    // 'auto' will use system preference (handled by useDark)
   }
 
-  watch(
-    () => appStore.config?.theme,
-    (theme) => {
-      if (theme === 'dark') {
-        isDark.value = true
-      } else if (theme === 'light') {
-        isDark.value = false
-      }
+  function onSystemThemeChange(e: MediaQueryListEvent) {
+    if (appStore.config?.theme === 'auto') {
+      isDark.value = e.matches
     }
-  )
+  }
+
+  mediaQuery.addEventListener('change', onSystemThemeChange)
+  onScopeDispose(() => {
+    mediaQuery.removeEventListener('change', onSystemThemeChange)
+  })
+
+  function initTheme() {
+    if (!appStore.config) return
+    applyTheme(appStore.config.theme)
+  }
+
+  watch(() => appStore.config?.theme, applyTheme)
 
   async function setTheme(theme: 'auto' | 'light' | 'dark') {
     await appStore.setTheme(theme)
@@ -42,7 +49,6 @@ export function useTheme() {
 
   return {
     isDark,
-    toggleDark,
     initTheme,
     setTheme,
   }

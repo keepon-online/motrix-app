@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, h } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, h, inject, type Ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
@@ -15,12 +15,24 @@ const route = useRoute()
 const taskStore = useTaskStore()
 
 const addDialogVisible = ref(false)
+const showAddDialog = inject<Ref<boolean>>('showAddDialog')
 let refreshInterval: number | null = null
+
+// Sync with App.vue's showAddDialog (for deep-link/CLI URL handling)
+if (showAddDialog) {
+  watch(showAddDialog, (val) => {
+    if (val) {
+      addDialogVisible.value = true
+      showAddDialog.value = false
+    }
+  })
+}
 let currentInterval = 1000
+let lastSelectedIndex = -1
 
 const pageTitle = computed(() => {
   const status = route.params.status as string
-  if (status === 'stopped') return t('nav.completed')
+  if (status === 'stopped') return t('nav.stopped')
   if (status === 'waiting') return t('nav.waiting')
   return t('nav.downloads')
 })
@@ -76,6 +88,21 @@ watch(() => route.params.status, () => {
   taskStore.clearSelection()
   fetchTasks()
 })
+
+// Shift+Click range selection
+function handleTaskClick(e: MouseEvent, gid: string, index: number) {
+  if (e.shiftKey && lastSelectedIndex >= 0) {
+    const tasks = taskStore.filteredTasks
+    const start = Math.min(lastSelectedIndex, index)
+    const end = Math.max(lastSelectedIndex, index)
+    for (let i = start; i <= end; i++) {
+      taskStore.selectTask(tasks[i].gid)
+    }
+  } else {
+    taskStore.toggleSelectTask(gid)
+    lastSelectedIndex = index
+  }
+}
 
 // Keyboard shortcuts
 function handleKeydown(e: KeyboardEvent) {
@@ -145,6 +172,14 @@ async function confirmRemoveSelected() {
   }
 }
 
+async function retryTask(task: import('@/types').Task) {
+  try {
+    await taskStore.retryTask(task)
+  } catch (e) {
+    console.error('Failed to retry task:', e)
+  }
+}
+
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
 })
@@ -211,16 +246,19 @@ onUnmounted(() => {
     <div class="tasks-list">
       <template v-if="taskStore.filteredTasks.length > 0">
         <TaskItem
-          v-for="task in taskStore.filteredTasks"
+          v-for="(task, index) in taskStore.filteredTasks"
           :key="task.gid"
           :task="task"
           :selected="taskStore.selectedGids.includes(task.gid)"
-          @click="taskStore.toggleSelectTask(task.gid)"
+          @click="(e: MouseEvent) => handleTaskClick(e, task.gid, index)"
           @select="taskStore.toggleSelectTask(task.gid)"
           @pause="taskStore.pauseTask(task.gid)"
           @resume="taskStore.resumeTask(task.gid)"
           @remove="confirmRemoveTask(task.gid)"
+          @retry="retryTask(task)"
           @show-detail="taskStore.showTaskDetail(task)"
+          @move-up="taskStore.moveTaskUp(task.gid)"
+          @move-down="taskStore.moveTaskDown(task.gid)"
         />
       </template>
       <el-empty v-else :description="t('task.noTasks')" :image-size="120">

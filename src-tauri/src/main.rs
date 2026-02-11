@@ -46,9 +46,29 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_window_state::Builder::new().build())
         .setup(|app| {
             // Initialize tray
             tray::create_tray(app)?;
+
+            // Hide window on startup if configured
+            {
+                use tauri_plugin_store::StoreExt;
+                let start_hidden = app.handle()
+                    .store("config.json")
+                    .ok()
+                    .and_then(|store| store.get("config"))
+                    .and_then(|v| v.get("startHidden").and_then(|v| v.as_bool()))
+                    .unwrap_or(false);
+
+                if start_hidden {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.hide();
+                        tracing::info!("Window hidden on startup (startHidden=true)");
+                    }
+                }
+            }
 
             // Parse command line arguments from first launch
             let args: Vec<String> = std::env::args().collect();
@@ -100,6 +120,8 @@ fn main() {
             commands::add_uri,
             commands::add_torrent,
             commands::add_torrent_file,
+            commands::add_metalink_file,
+            commands::add_metalink_file_base64,
             commands::pause_task,
             commands::resume_task,
             commands::remove_task,
@@ -124,6 +146,9 @@ fn main() {
             commands::update_tray_menu,
             commands::delete_task_files,
             commands::parse_torrent_file,
+            commands::prevent_sleep,
+            commands::allow_sleep,
+            commands::change_task_position,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

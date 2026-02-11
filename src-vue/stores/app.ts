@@ -82,6 +82,10 @@ export const useAppStore = defineStore('app', () => {
         btForceEncryption: 'bt-force-encryption',
         btRequireCrypto: 'bt-require-crypto',
         followMetalink: 'follow-metalink',
+        btSaveMetadata: 'bt-save-metadata',
+        btLoadSavedMetadata: 'bt-load-saved-metadata',
+        btRemoveUnselectedFile: 'bt-remove-unselected-file',
+        btDetachSeedOnly: 'bt-detach-seed-only',
       }
 
       const engineOptions: Record<string, string> = {}
@@ -116,6 +120,28 @@ export const useAppStore = defineStore('app', () => {
 
   async function setDownloadDir(dir: string) {
     await saveConfig({ downloadDir: dir })
+  }
+
+  const TRACKER_SYNC_INTERVAL = 12 * 60 * 60 * 1000 // 12 hours
+
+  async function autoSyncTrackers() {
+    if (!config.value) return
+    const lastUpdate = config.value.lastTrackerUpdate || 0
+    const now = Date.now()
+    if (now - lastUpdate < TRACKER_SYNC_INTERVAL) return
+    if (!config.value.trackerSource || config.value.trackerSource.length === 0) return
+
+    try {
+      const trackers = await invoke<string[]>('fetch_tracker_list', { sources: config.value.trackerSource })
+      if (trackers.length > 0) {
+        const btTracker = trackers.join(',')
+        await saveConfig({ btTracker, lastTrackerUpdate: now })
+        // Also update aria2 engine
+        await invoke('change_global_option', { options: { 'bt-tracker': btTracker } }).catch(() => {})
+      }
+    } catch (e) {
+      console.warn('Auto tracker sync failed:', e)
+    }
   }
 
   async function resetConfig() {
@@ -159,7 +185,7 @@ export const useAppStore = defineStore('app', () => {
       btForceEncryption: false,
       btRequireCrypto: false,
       pauseMetadata: false,
-      userAgent: 'Motrix/2.0.0',
+      userAgent: `Motrix/${__APP_VERSION__}`,
       proxyEnabled: false,
       proxyType: 'http',
       proxyHost: '',
@@ -175,6 +201,11 @@ export const useAppStore = defineStore('app', () => {
       autoFileRenaming: true,
       continueDownload: true,
       followMetalink: 'true',
+      lastTrackerUpdate: 0,
+      btSaveMetadata: true,
+      btLoadSavedMetadata: true,
+      btRemoveUnselectedFile: false,
+      btDetachSeedOnly: false,
     }
   }
 
@@ -194,5 +225,6 @@ export const useAppStore = defineStore('app', () => {
     setLocale,
     setDownloadDir,
     resetConfig,
+    autoSyncTrackers,
   }
 })

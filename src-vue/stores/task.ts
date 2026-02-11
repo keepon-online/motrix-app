@@ -73,22 +73,6 @@ export const useTaskStore = defineStore('task', () => {
     return result
   })
 
-  const activeTasks = computed(() =>
-    tasks.value.filter((t) => t.status === 'active' || t.status === 'waiting')
-  )
-
-  const completedTasks = computed(() =>
-    tasks.value.filter((t) => t.status === 'complete')
-  )
-
-  const downloadSpeed = computed(() => {
-    return tasks.value.reduce((sum, t) => sum + parseInt(t.downloadSpeed || '0'), 0)
-  })
-
-  const uploadSpeed = computed(() => {
-    return tasks.value.reduce((sum, t) => sum + parseInt(t.uploadSpeed || '0'), 0)
-  })
-
   // Actions
   async function fetchTasks(type?: TaskListType) {
     const listType = type ?? currentListType.value
@@ -130,6 +114,16 @@ export const useTaskStore = defineStore('task', () => {
       await fetchTasks()
     } catch (error) {
       console.error('Failed to add torrent:', error)
+      throw error
+    }
+  }
+
+  async function addMetalink(metalink: string, options?: AddTaskOptions) {
+    try {
+      await invoke('add_metalink_file_base64', { metalink, options })
+      await fetchTasks()
+    } catch (error) {
+      console.error('Failed to add metalink:', error)
       throw error
     }
   }
@@ -196,14 +190,6 @@ export const useTaskStore = defineStore('task', () => {
     } catch (error) {
       console.error('Failed to remove task:', error)
       throw error
-    }
-  }
-
-  async function toggleTask(task: Task) {
-    if (task.status === 'active') {
-      await pauseTask(task.gid)
-    } else if (task.status === 'paused' || task.status === 'waiting') {
-      await resumeTask(task.gid)
     }
   }
 
@@ -321,6 +307,44 @@ export const useTaskStore = defineStore('task', () => {
     }
   }
 
+  async function retryTask(task: Task) {
+    // Get the download URL from the task
+    const uri = task.files?.[0]?.uris?.[0]?.uri
+    if (!uri) throw new Error('No URI to retry')
+
+    const options: Record<string, string> = {}
+    if (task.dir) options.dir = task.dir
+
+    // Remove the failed task record first
+    try {
+      await invoke('remove_task_record', { gid: task.gid })
+    } catch {
+      // Record may not exist, ignore
+    }
+
+    // Re-add the download
+    await invoke('add_uri', { uris: [uri], options })
+    await fetchTasks()
+  }
+
+  async function moveTaskUp(gid: string) {
+    try {
+      await invoke('change_task_position', { gid, pos: -1, how: 'POS_CUR' })
+      await fetchTasks()
+    } catch (error) {
+      console.error('Failed to move task up:', error)
+    }
+  }
+
+  async function moveTaskDown(gid: string) {
+    try {
+      await invoke('change_task_position', { gid, pos: 1, how: 'POS_CUR' })
+      await fetchTasks()
+    } catch (error) {
+      console.error('Failed to move task down:', error)
+    }
+  }
+
   return {
     // State
     tasks,
@@ -335,24 +359,19 @@ export const useTaskStore = defineStore('task', () => {
     sortOrder,
     // Getters
     filteredTasks,
-    activeTasks,
-    completedTasks,
-    downloadSpeed,
-    uploadSpeed,
     // Actions
     fetchTasks,
     fetchGlobalStat,
     addUri,
     addTorrent,
+    addMetalink,
     pauseTask,
     resumeTask,
     removeTask,
-    toggleTask,
     fetchTaskInfo,
     showTaskDetail,
     hideTaskDetail,
     selectTask,
-    deselectTask,
     toggleSelectTask,
     selectAllTasks,
     clearSelection,
@@ -363,5 +382,8 @@ export const useTaskStore = defineStore('task', () => {
     resumeAllTasks,
     removeTaskRecord,
     purgeTaskRecords,
+    retryTask,
+    moveTaskUp,
+    moveTaskDown,
   }
 })

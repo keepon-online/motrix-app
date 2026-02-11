@@ -46,12 +46,8 @@ struct NotificationParam {
 
 /// Aria2 RPC client
 pub struct Aria2Client {
-    #[allow(dead_code)]
-    port: u16,
     secret: String,
     sender: mpsc::Sender<RpcRequest>,
-    #[allow(dead_code)]
-    app_handle: AppHandle,
 }
 
 struct RpcRequest {
@@ -146,6 +142,19 @@ async fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig)
         format!("--dht-file-path6={}", dht6_path.display()),
     ]);
 
+    // Write sensitive options (proxy password) to a conf file to avoid exposure in process list
+    let conf_path = app_data_dir.join("aria2.conf");
+    if config.proxy_enabled && !config.proxy_password.is_empty() {
+        let conf_content = format!("all-proxy-passwd={}\n", config.proxy_password);
+        std::fs::write(&conf_path, conf_content)
+            .map_err(|e| Error::Custom(format!("Failed to write aria2 conf: {}", e)))?;
+        args.push(format!("--conf-path={}", conf_path.display()));
+    } else {
+        // Remove stale conf file and disable default conf
+        let _ = std::fs::remove_file(&conf_path);
+        args.push("--no-conf".to_string());
+    }
+
     // Spawn aria2c process
     let (mut _rx, child) = shell
         .sidecar("aria2c")
@@ -178,14 +187,17 @@ impl Aria2Client {
             .await
             .map_err(|e| Error::WebSocket(e.to_string()))?;
 
-        let (mut write, mut read) = ws_stream.split();
+        let (write, read) = ws_stream.split();
         let (tx, mut rx) = mpsc::channel::<RpcRequest>(100);
         let event_app_handle = app_handle.clone();
 
-        // Spawn message handler
+        // Spawn message handler with reconnection
+        let ws_url = url.clone();
         tokio::spawn(async move {
             let mut pending: std::collections::HashMap<u64, oneshot::Sender<Result<Value>>> =
                 std::collections::HashMap::new();
+            let mut write = write;
+            let mut read = read;
 
             loop {
                 tokio::select! {
@@ -230,8 +242,35 @@ impl Aria2Client {
                                 }
                             }
                             Err(e) => {
-                                tracing::error!("WebSocket error: {}", e);
-                                break;
+                                tracing::error!("WebSocket error: {}, attempting reconnect...", e);
+                                let _ = event_app_handle.emit("aria2-connection", "disconnected");
+                                // Fail all pending requests
+                                for (_, tx) in pending.drain() {
+                                    let _ = tx.send(Err(Error::Aria2Rpc("WebSocket disconnected".to_string())));
+                                }
+                                // Attempt reconnection with retries
+                                let mut reconnected = false;
+                                for attempt in 1..=10 {
+                                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                                    match connect_async(&ws_url).await {
+                                        Ok((new_stream, _)) => {
+                                            let (new_write, new_read) = new_stream.split();
+                                            write = new_write;
+                                            read = new_read;
+                                            tracing::info!("WebSocket reconnected on attempt {}", attempt);
+                                            let _ = event_app_handle.emit("aria2-connection", "connected");
+                                            reconnected = true;
+                                            break;
+                                        }
+                                        Err(e) => {
+                                            tracing::warn!("Reconnect attempt {}/10 failed: {}", attempt, e);
+                                        }
+                                    }
+                                }
+                                if !reconnected {
+                                    tracing::error!("Failed to reconnect after 10 attempts, giving up");
+                                    break;
+                                }
                             }
                             _ => {}
                         }
@@ -242,10 +281,8 @@ impl Aria2Client {
         });
 
         Ok(Self {
-            port,
             secret,
             sender: tx,
-            app_handle,
         })
     }
 
@@ -277,46 +314,10 @@ impl Aria2Client {
                 tracing::error!("Failed to emit aria2 event: {}", e);
             }
 
-            // Send system notification for download complete/error (respecting config)
-            let notify_on_complete = {
-                use tauri_plugin_store::StoreExt;
-                app_handle
-                    .store("config.json")
-                    .ok()
-                    .and_then(|store| store.get("config"))
-                    .and_then(|v| v.get("notifyOnComplete").and_then(|v| v.as_bool()))
-                    .unwrap_or(true)
-            };
-
-            match event_type {
-                Aria2EventType::DownloadComplete | Aria2EventType::BtDownloadComplete => {
-                    if notify_on_complete {
-                        Self::send_notification(app_handle, "Download Complete", &format!("Task {} has completed", param.gid));
-                    }
-                }
-                Aria2EventType::DownloadError => {
-                    if notify_on_complete {
-                        Self::send_notification(app_handle, "Download Error", &format!("Task {} encountered an error", param.gid));
-                    }
-                }
-                _ => {}
-            }
+            // Notifications are handled by the frontend (useAria2Events) with i18n support
         }
     }
 
-    /// Send system notification
-    fn send_notification(app_handle: &AppHandle, title: &str, body: &str) {
-        use tauri_plugin_notification::NotificationExt;
-
-        if let Err(e) = app_handle.notification()
-            .builder()
-            .title(title)
-            .body(body)
-            .show()
-        {
-            tracing::error!("Failed to send notification: {}", e);
-        }
-    }
 
     /// Call an aria2 RPC method
     pub async fn call(&self, method: &str, params: Vec<Value>) -> Result<Value> {
@@ -369,6 +370,15 @@ impl Aria2Client {
             .as_str()
             .map(String::from)
             .ok_or_else(|| Error::Aria2Rpc("Invalid response".to_string()))
+    }
+
+    /// Add metalink download
+    pub async fn add_metalink(&self, metalink: &str, options: Option<Value>) -> Result<Value> {
+        let mut params = vec![json!(metalink)];
+        if let Some(opts) = options {
+            params.push(opts);
+        }
+        self.call("addMetalink", params).await
     }
 
     /// Pause task
@@ -464,11 +474,6 @@ impl Aria2Client {
             .ok_or_else(|| Error::Aria2Rpc("Invalid response".to_string()))
     }
 
-    /// Force pause all tasks
-    pub async fn force_pause_all(&self) -> Result<Value> {
-        self.call("forcePauseAll", vec![]).await
-    }
-
     /// Force remove a task
     pub async fn force_remove(&self, gid: &str) -> Result<String> {
         let result = self.call("forceRemove", vec![json!(gid)]).await?;
@@ -488,50 +493,14 @@ impl Aria2Client {
         self.call("getPeers", vec![json!(gid)]).await
     }
 
-    /// Get global options
-    pub async fn get_global_option(&self) -> Result<Value> {
-        self.call("getGlobalOption", vec![]).await
-    }
-
-    /// Get task-specific options
-    pub async fn get_option(&self, gid: &str) -> Result<Value> {
-        self.call("getOption", vec![json!(gid)]).await
-    }
-
     /// Change task-specific options
     pub async fn change_option(&self, gid: &str, options: Value) -> Result<Value> {
         self.call("changeOption", vec![json!(gid), options]).await
     }
 
-    /// Batch call multiple RPC methods (multicall)
-    pub async fn multicall(&self, methods: Vec<(String, Vec<Value>)>) -> Result<Value> {
-        let params: Vec<Value> = methods
-            .into_iter()
-            .map(|(method, params)| {
-                let mut full_params = vec![json!(format!("token:{}", self.secret))];
-                full_params.extend(params);
-                json!({
-                    "methodName": format!("aria2.{}", method),
-                    "params": full_params
-                })
-            })
-            .collect();
-
-        // multicall is a system method, not aria2 namespace
-        let (tx, rx) = oneshot::channel();
-        let request = RpcRequest {
-            method: "system.multicall".to_string(),
-            params: vec![json!(params)],
-            response_tx: tx,
-        };
-
-        self.sender
-            .send(request)
-            .await
-            .map_err(|_| Error::Aria2Rpc("Failed to send request".to_string()))?;
-
-        rx.await
-            .map_err(|_| Error::Aria2Rpc("Failed to receive response".to_string()))?
+    /// Change task position in the waiting queue
+    pub async fn change_position(&self, gid: &str, pos: i32, how: &str) -> Result<Value> {
+        self.call("changePosition", vec![json!(gid), json!(pos), json!(how)]).await
     }
 
     /// Shutdown aria2

@@ -36,6 +36,12 @@ pub struct AppConfig {
     pub bt_require_crypto: bool,
     pub pause_metadata: bool,
 
+    // BT advanced settings
+    pub bt_save_metadata: bool,
+    pub bt_load_saved_metadata: bool,
+    pub bt_remove_unselected_file: bool,
+    pub bt_detach_seed_only: bool,
+
     // Advanced settings
     pub user_agent: String,
     pub rpc_port: u16,
@@ -55,6 +61,9 @@ pub struct AppConfig {
     pub proxy_username: String,
     pub proxy_password: String,
     pub no_proxy: String,
+
+    // Tracker auto-sync
+    pub last_tracker_update: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -110,6 +119,11 @@ impl Default for AppConfig {
             bt_require_crypto: false,
             pause_metadata: false,
 
+            bt_save_metadata: true,
+            bt_load_saved_metadata: true,
+            bt_remove_unselected_file: false,
+            bt_detach_seed_only: false,
+
             user_agent: format!("Motrix/{}", env!("CARGO_PKG_VERSION")),
             rpc_port: 16800,
             rpc_secret: uuid::Uuid::new_v4().to_string(),
@@ -127,6 +141,8 @@ impl Default for AppConfig {
             proxy_username: String::new(),
             proxy_password: String::new(),
             no_proxy: String::new(),
+
+            last_tracker_update: 0,
         }
     }
 }
@@ -154,11 +170,10 @@ impl AppConfig {
             "--rpc-allow-origin-all=true".to_string(),
             "--enable-dht=true".to_string(),
             "--enable-dht6=true".to_string(),
-            format!("--enable-peer-exchange=true"),
-            format!("--bt-enable-lpd=true"),
-            // Note: --enable-upnp is not supported in this aria2c build
+            "--enable-peer-exchange=true".to_string(),
+            "--bt-enable-lpd=true".to_string(),
             "--follow-torrent=false".to_string(),
-            "--check-certificate=false".to_string(),
+            "--check-certificate=true".to_string(),
             format!("--max-overall-download-limit={}", self.max_overall_download_limit),
             format!("--max-overall-upload-limit={}", self.max_overall_upload_limit),
             format!("--allow-overwrite={}", self.allow_overwrite),
@@ -167,6 +182,10 @@ impl AppConfig {
             format!("--bt-force-encryption={}", self.bt_force_encryption),
             format!("--bt-require-crypto={}", self.bt_require_crypto),
             format!("--pause-metadata={}", self.pause_metadata),
+            format!("--bt-save-metadata={}", self.bt_save_metadata),
+            format!("--bt-load-saved-metadata={}", self.bt_load_saved_metadata),
+            format!("--bt-remove-unselected-file={}", self.bt_remove_unselected_file),
+            format!("--bt-detach-seed-only={}", self.bt_detach_seed_only),
             format!("--follow-metalink={}", self.follow_metalink),
         ];
 
@@ -182,9 +201,7 @@ impl AppConfig {
             if !self.proxy_username.is_empty() {
                 args.push(format!("--all-proxy-user={}", self.proxy_username));
             }
-            if !self.proxy_password.is_empty() {
-                args.push(format!("--all-proxy-passwd={}", self.proxy_password));
-            }
+            // Note: proxy password is passed via conf-path to avoid exposure in process list
             if !self.no_proxy.is_empty() {
                 args.push(format!("--no-proxy={}", self.no_proxy));
             }

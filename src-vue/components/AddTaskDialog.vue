@@ -7,6 +7,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage } from 'element-plus'
+import { formatBytes, decodeThunderUrl } from '@/utils'
 
 interface TorrentFileInfo {
   index: number
@@ -29,13 +30,15 @@ const appStore = useAppStore()
 // Receive pending URLs from App.vue (CLI args, deep links, second instance)
 const pendingUrls = inject<Ref<string[]>>('pendingUrls', ref([]))
 
-const activeTab = ref<'uri' | 'torrent'>('uri')
+const activeTab = ref<'uri' | 'torrent' | 'metalink'>('uri')
 const uriInput = ref('')
 const torrentFile = ref<string | null>(null)
 const torrentFilePath = ref<string | null>(null)
 const torrentFileName = ref('')
 const torrentInfo = ref<TorrentInfo | null>(null)
 const selectedFileIndices = ref<number[]>([])
+const metalinkFilePath = ref<string | null>(null)
+const metalinkFileName = ref('')
 const showAdvanced = ref(false)
 
 // Options
@@ -53,6 +56,9 @@ const authorization = ref('')
 const canSubmit = computed(() => {
   if (activeTab.value === 'uri') {
     return uriInput.value.trim().length > 0
+  }
+  if (activeTab.value === 'metalink') {
+    return metalinkFilePath.value !== null
   }
   return torrentFile.value !== null
 })
@@ -85,13 +91,6 @@ watch(visible, async (val) => {
 
 function isUrl(text: string): boolean {
   return /^(https?|ftp|magnet|thunder):\/?\/?\S/i.test(text)
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + units[i]
 }
 
 async function selectTorrent() {
@@ -138,6 +137,19 @@ function toggleFile(index: number) {
   }
 }
 
+async function selectMetalink() {
+  const selected = await open({
+    multiple: false,
+    filters: [{ name: 'Metalink', extensions: ['metalink', 'meta4'] }],
+  })
+
+  if (selected) {
+    const filePath = selected as string
+    metalinkFilePath.value = filePath
+    metalinkFileName.value = filePath.split('/').pop()?.split('\\').pop() || 'metalink'
+  }
+}
+
 async function selectDirectory() {
   const selected = await open({
     directory: true,
@@ -177,12 +189,15 @@ async function submit() {
         .split('\n')
         .map((u) => u.trim())
         .filter((u) => u.length > 0)
+        .map((u) => decodeThunderUrl(u))
 
       if (uris.length === 0) return
 
       for (const uri of uris) {
         await taskStore.addUri([uri], options)
       }
+    } else if (activeTab.value === 'metalink' && metalinkFilePath.value) {
+      await invoke('add_metalink_file', { filePath: metalinkFilePath.value, options })
     } else if (torrentFile.value) {
       // Add select-file option if user has deselected some files
       if (torrentInfo.value && selectedFileIndices.value.length > 0
@@ -211,6 +226,8 @@ function resetForm() {
   torrentFileName.value = ''
   torrentInfo.value = null
   selectedFileIndices.value = []
+  metalinkFilePath.value = null
+  metalinkFileName.value = ''
   fileName.value = ''
   userAgent.value = ''
   referer.value = ''
@@ -274,10 +291,20 @@ function handleClose() {
                 @change="toggleFile(file.index)"
               >
                 <span class="file-path">{{ file.path }}</span>
-                <span class="file-size">{{ formatFileSize(file.length) }}</span>
+                <span class="file-size">{{ formatBytes(file.length) }}</span>
               </el-checkbox>
             </div>
           </div>
+        </div>
+      </el-tab-pane>
+
+      <el-tab-pane :label="t('dialog.metalink')" name="metalink">
+        <div class="torrent-upload">
+          <el-button @click="selectMetalink">
+            <el-icon><Upload /></el-icon>
+            {{ t('dialog.selectMetalink') }}
+          </el-button>
+          <span v-if="metalinkFileName" class="torrent-name">{{ metalinkFileName }}</span>
         </div>
       </el-tab-pane>
     </el-tabs>

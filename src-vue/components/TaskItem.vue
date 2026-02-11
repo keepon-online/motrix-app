@@ -15,8 +15,11 @@ const contextMenuX = ref(0)
 const contextMenuY = ref(0)
 
 function showContextMenu(e: MouseEvent) {
-  contextMenuX.value = e.clientX
-  contextMenuY.value = e.clientY
+  // Clamp position to prevent overflow
+  const menuWidth = 200
+  const menuHeight = 300
+  contextMenuX.value = Math.min(e.clientX, window.innerWidth - menuWidth)
+  contextMenuY.value = Math.min(e.clientY, window.innerHeight - menuHeight)
   contextMenuVisible.value = true
 }
 
@@ -29,6 +32,7 @@ function onContextMenuAction(action: string) {
   switch (action) {
     case 'pause': emit('pause'); break
     case 'resume': emit('resume'); break
+    case 'retry': emit('retry'); break
     case 'openFile': openFile(); break
     case 'showInFolder': showInFolder(); break
     case 'copyLink': copyLink(); break
@@ -57,12 +61,15 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'click'): void
+  (e: 'click', event: MouseEvent): void
   (e: 'select'): void
   (e: 'pause'): void
   (e: 'resume'): void
   (e: 'remove'): void
   (e: 'showDetail'): void
+  (e: 'retry'): void
+  (e: 'moveUp'): void
+  (e: 'moveDown'): void
 }>()
 
 const taskName = computed(() => getTaskName(props.task))
@@ -101,7 +108,9 @@ const statusText = computed(() => {
 
 const isActive = computed(() => props.task.status === 'active')
 const isPaused = computed(() => props.task.status === 'paused' || props.task.status === 'waiting')
+const isWaiting = computed(() => props.task.status === 'waiting' || props.task.status === 'paused')
 const isComplete = computed(() => props.task.status === 'complete')
+const isError = computed(() => props.task.status === 'error')
 
 const firstFilePath = computed(() => {
   if (props.task.files?.[0]?.path) return props.task.files[0].path
@@ -148,7 +157,7 @@ async function copyLink() {
   <div
     class="task-item"
     :class="[statusClass, { selected }]"
-    @click="emit('click')"
+    @click="emit('click', $event)"
     @dblclick="emit('showDetail')"
     @contextmenu.prevent="showContextMenu"
   >
@@ -223,6 +232,24 @@ async function copyLink() {
         <el-icon><VideoPlay /></el-icon>
       </el-button>
       <el-button
+        v-if="isWaiting"
+        circle
+        size="small"
+        @click="emit('moveUp')"
+        :title="t('task.moveUp')"
+      >
+        <el-icon><Top /></el-icon>
+      </el-button>
+      <el-button
+        v-if="isWaiting"
+        circle
+        size="small"
+        @click="emit('moveDown')"
+        :title="t('task.moveDown')"
+      >
+        <el-icon><Bottom /></el-icon>
+      </el-button>
+      <el-button
         circle
         size="small"
         type="danger"
@@ -249,7 +276,11 @@ async function copyLink() {
           <el-icon><VideoPlay /></el-icon>
           <span>{{ t('task.resume') }}</span>
         </div>
-        <div class="context-menu-divider" v-if="isActive || isPaused" />
+        <div v-if="isError && taskUrl" class="context-menu-item" @click="onContextMenuAction('retry')">
+          <el-icon><RefreshRight /></el-icon>
+          <span>{{ t('task.retry') }}</span>
+        </div>
+        <div class="context-menu-divider" v-if="isActive || isPaused || isError" />
         <div v-if="isComplete && firstFilePath" class="context-menu-item" @click="onContextMenuAction('openFile')">
           <el-icon><Document /></el-icon>
           <span>{{ t('task.openFile') }}</span>

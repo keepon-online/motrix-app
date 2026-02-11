@@ -95,12 +95,11 @@ export interface AppConfig {
   autoFileRenaming: boolean
   continueDownload: boolean
   followMetalink: string
-}
-
-export interface ProxyConfig {
-  enable: boolean
-  server: string
-  bypass: string
+  lastTrackerUpdate: number
+  btSaveMetadata: boolean
+  btLoadSavedMetadata: boolean
+  btRemoveUnselectedFile: boolean
+  btDetachSeedOnly: boolean
 }
 
 // Add task options

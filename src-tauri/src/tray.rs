@@ -38,7 +38,6 @@ pub fn create_tray<R: Runtime>(app: &tauri::App<R>) -> Result<(), tauri::Error> 
                 }
             }
             "pause_all" => {
-                let _app = app.clone();
                 tauri::async_runtime::spawn(async move {
                     match aria2::get_client().await {
                         Ok(client) => {
@@ -53,7 +52,6 @@ pub fn create_tray<R: Runtime>(app: &tauri::App<R>) -> Result<(), tauri::Error> 
                 });
             }
             "resume_all" => {
-                let _app = app.clone();
                 tauri::async_runtime::spawn(async move {
                     match aria2::get_client().await {
                         Ok(client) => {
@@ -69,13 +67,15 @@ pub fn create_tray<R: Runtime>(app: &tauri::App<R>) -> Result<(), tauri::Error> 
             }
             "quit" => {
                 tracing::info!("Quitting application");
-                // Shutdown aria2 before quitting
-                tauri::async_runtime::spawn(async {
+                // Save session and shutdown aria2 before quitting
+                let app_handle = app.clone();
+                tauri::async_runtime::spawn(async move {
                     if let Ok(client) = aria2::get_client().await {
+                        let _ = client.save_session().await;
                         let _ = client.shutdown().await;
                     }
+                    app_handle.exit(0);
                 });
-                app.exit(0);
             }
             _ => {}
         })

@@ -57,6 +57,24 @@ pub async fn add_torrent_file(file_path: String, options: Option<Value>) -> Resu
     client.add_torrent(&b64, options).await
 }
 
+/// Add metalink download task from file path
+#[tauri::command]
+pub async fn add_metalink_file(file_path: String, options: Option<Value>) -> Result<Value> {
+    use base64::Engine;
+    let data = std::fs::read(&file_path)
+        .map_err(|e| Error::Custom(format!("Failed to read metalink file: {}", e)))?;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
+    let client = aria2::get_client().await?;
+    client.add_metalink(&b64, options).await
+}
+
+/// Add metalink download task from base64 data (for drag-drop)
+#[tauri::command]
+pub async fn add_metalink_file_base64(metalink: String, options: Option<Value>) -> Result<Value> {
+    let client = aria2::get_client().await?;
+    client.add_metalink(&metalink, options).await
+}
+
 /// Pause a task
 #[tauri::command]
 pub async fn pause_task(gid: String) -> Result<String> {
@@ -86,7 +104,7 @@ pub async fn get_task_list(task_type: String) -> Result<Value> {
     match task_type.as_str() {
         "active" => {
             let active = client.tell_active().await?;
-            let waiting = client.tell_waiting(0, 100).await?;
+            let waiting = client.tell_waiting(0, 1000).await?;
 
             // Merge active and waiting
             let mut tasks = Vec::new();
@@ -98,8 +116,8 @@ pub async fn get_task_list(task_type: String) -> Result<Value> {
             }
             Ok(serde_json::to_value(tasks)?)
         }
-        "waiting" => client.tell_waiting(0, 100).await,
-        "stopped" => client.tell_stopped(0, 1000).await,
+        "waiting" => client.tell_waiting(0, 1000).await,
+        "stopped" => client.tell_stopped(0, 10000).await,
         _ => client.tell_active().await,
     }
 }
@@ -280,17 +298,37 @@ pub async fn fetch_tracker_list(sources: Vec<String>) -> Result<Vec<String>> {
     Ok(all_trackers)
 }
 
-/// Delete local files for a task
+/// Delete local files for a task (restricted to download directory)
 #[tauri::command]
-pub async fn delete_task_files(file_paths: Vec<String>) -> Result<()> {
+pub async fn delete_task_files(app: tauri::AppHandle, file_paths: Vec<String>) -> Result<()> {
+    // Get download directory from config for path validation
+    let download_dir = {
+        let store = app.store("config.json")?;
+        let config: AppConfig = if let Some(data) = store.get("config") {
+            serde_json::from_value(data.clone()).unwrap_or_default()
+        } else {
+            AppConfig::default()
+        };
+        config.download_dir
+    };
+
     for path in &file_paths {
         let p = std::path::Path::new(path);
-        if p.exists() {
-            if p.is_dir() {
-                std::fs::remove_dir_all(p)
+        // Resolve to canonical path to prevent path traversal
+        let canonical = p.canonicalize()
+            .map_err(|e| Error::Custom(format!("Invalid path {}: {}", path, e)))?;
+        let dir_canonical = download_dir.canonicalize().unwrap_or(download_dir.clone());
+
+        if !canonical.starts_with(&dir_canonical) {
+            return Err(Error::Custom(format!("Path {} is outside download directory", path)));
+        }
+
+        if canonical.exists() {
+            if canonical.is_dir() {
+                std::fs::remove_dir_all(&canonical)
                     .map_err(|e| Error::Custom(format!("Failed to delete directory {}: {}", path, e)))?;
             } else {
-                std::fs::remove_file(p)
+                std::fs::remove_file(&canonical)
                     .map_err(|e| Error::Custom(format!("Failed to delete file {}: {}", path, e)))?;
             }
         }
@@ -400,4 +438,27 @@ pub async fn update_tray_menu(app: tauri::AppHandle, labels: TrayLabels) -> Resu
     crate::tray::update_tray_labels(&app, &labels)
         .map_err(|e| Error::Custom(format!("Failed to update tray menu: {}", e)))?;
     Ok(())
+}
+
+/// Prevent system sleep (during active downloads)
+#[tauri::command]
+pub async fn prevent_sleep() -> Result<()> {
+    crate::power::prevent_sleep()
+        .map_err(|e| Error::Custom(format!("Failed to prevent sleep: {}", e)))?;
+    Ok(())
+}
+
+/// Allow system sleep (when no active downloads)
+#[tauri::command]
+pub async fn allow_sleep() -> Result<()> {
+    crate::power::allow_sleep()
+        .map_err(|e| Error::Custom(format!("Failed to allow sleep: {}", e)))?;
+    Ok(())
+}
+
+/// Change task position in the waiting queue
+#[tauri::command]
+pub async fn change_task_position(gid: String, pos: i32, how: String) -> Result<Value> {
+    let client = aria2::get_client().await?;
+    client.change_position(&gid, pos, &how).await
 }

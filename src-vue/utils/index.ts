@@ -3,7 +3,7 @@
  */
 export function formatBytes(bytes: number | string, decimals = 2): string {
   const b = typeof bytes === 'string' ? parseInt(bytes) : bytes
-  if (b === 0) return '0 B'
+  if (!isFinite(b) || b <= 0) return '0 B'
 
   const k = 1024
   const dm = decimals < 0 ? 0 : decimals
@@ -89,4 +89,21 @@ export function getTaskName(task: { files?: { path?: string }[]; bittorrent?: { 
  */
 export function isBtTask(task: { bittorrent?: unknown }): boolean {
   return !!task.bittorrent
+}
+
+/**
+ * Decode thunder:// URL to real download URL
+ * thunder:// format: thunder://BASE64(AA<real_url>ZZ)
+ */
+export function decodeThunderUrl(url: string): string {
+  if (!url.toLowerCase().startsWith('thunder://')) return url
+  try {
+    const encoded = url.slice(10) // Skip "thunder://"
+    const decoded = atob(encoded)
+    // thunder wraps URL with "AA" prefix and "ZZ" suffix
+    const trimmed = decoded.replace(/^AA/, '').replace(/ZZ$/, '')
+    return trimmed || url
+  } catch {
+    return url
+  }
 }
