@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { formatSpeed } from '@/utils'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   downloadSpeed: string
@@ -11,7 +14,6 @@ const MAX_POINTS = 60
 const downloadHistory = ref<number[]>(new Array(MAX_POINTS).fill(0))
 const uploadHistory = ref<number[]>(new Array(MAX_POINTS).fill(0))
 const canvasRef = ref<HTMLCanvasElement | null>(null)
-let animationFrame: number | null = null
 
 const currentDownload = computed(() => formatSpeed(props.downloadSpeed))
 const currentUpload = computed(() => formatSpeed(props.uploadSpeed))
@@ -89,11 +91,7 @@ function drawLine(
   for (let i = 0; i < data.length; i++) {
     const x = i * step
     const y = h - (data[i] / maxVal) * (h * 0.9)
-    if (i === 0) {
-      ctx.lineTo(x, y)
-    } else {
-      ctx.lineTo(x, y)
-    }
+    ctx.lineTo(x, y)
   }
   ctx.lineTo((data.length - 1) * step, h)
   ctx.closePath()
@@ -128,11 +126,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (interval) clearInterval(interval)
-  if (animationFrame) cancelAnimationFrame(animationFrame)
-})
-
-watch([() => props.downloadSpeed, () => props.uploadSpeed], () => {
-  // Data will be pushed on next interval tick
 })
 </script>
 
@@ -141,12 +134,12 @@ watch([() => props.downloadSpeed, () => props.uploadSpeed], () => {
     <div class="activity-legend">
       <div class="legend-item">
         <span class="legend-dot download"></span>
-        <span class="legend-label">Download</span>
+        <span class="legend-label">{{ t('detail.download') }}</span>
         <span class="legend-value">{{ currentDownload }}</span>
       </div>
       <div class="legend-item">
         <span class="legend-dot upload"></span>
-        <span class="legend-label">Upload</span>
+        <span class="legend-label">{{ t('detail.upload') }}</span>
         <span class="legend-value">{{ currentUpload }}</span>
       </div>
     </div>

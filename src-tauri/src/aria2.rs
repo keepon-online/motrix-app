@@ -85,12 +85,24 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
     // Start aria2 process using config
     start_aria2_process(app, &config).await?;
 
-    // Wait for aria2 to start
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-    // Create client
-    let client = Aria2Client::new(app.clone(), port, secret).await?;
-    let client = Arc::new(client);
+    // Wait for aria2 to start, retry connection up to 10 times
+    let mut client = None;
+    for attempt in 1..=10 {
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        match Aria2Client::new(app.clone(), port, secret.clone()).await {
+            Ok(c) => {
+                client = Some(c);
+                break;
+            }
+            Err(e) => {
+                tracing::warn!("Aria2 connection attempt {}/10 failed: {}", attempt, e);
+                if attempt == 10 {
+                    return Err(e);
+                }
+            }
+        }
+    }
+    let client = Arc::new(client.unwrap());
 
     // Store globally
     let mut guard = ARIA2_CLIENT.write().await;

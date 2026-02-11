@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { Task } from '@/types'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   task: Task
@@ -42,7 +45,7 @@ function getTrackerProtocol(url: string): string {
 <template>
   <div class="task-trackers">
     <div v-if="trackers.length === 0" class="empty">
-      <el-empty description="No trackers" :image-size="60" />
+      <el-empty :description="t('detail.noTrackers')" :image-size="60" />
     </div>
     <div v-else class="tracker-list">
       <div

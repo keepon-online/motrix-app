@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { formatSpeed } from '@/utils'
+
+const { t } = useI18n()
 
 interface Peer {
   peerId: string
@@ -83,30 +86,30 @@ watch(() => props.gid, fetchPeers)
 <template>
   <div class="task-peers" v-loading="loading">
     <div v-if="peers.length === 0" class="empty">
-      <el-empty description="No peers connected" :image-size="60" />
+      <el-empty :description="t('detail.noPeers')" :image-size="60" />
     </div>
     <el-table v-else :data="peers" size="small" max-height="300">
-      <el-table-column label="IP" min-width="120">
+      <el-table-column :label="t('detail.ip')" min-width="120">
         <template #default="{ row }">
           {{ row.ip }}:{{ row.port }}
         </template>
       </el-table-column>
-      <el-table-column label="Client" min-width="100">
+      <el-table-column :label="t('detail.client')" min-width="100">
         <template #default="{ row }">
           {{ getPeerClient(row.peerId) }}
         </template>
       </el-table-column>
-      <el-table-column label="Download" width="90" align="right">
+      <el-table-column :label="t('detail.download')" width="90" align="right">
         <template #default="{ row }">
           {{ formatSpeed(row.downloadSpeed) }}
         </template>
       </el-table-column>
-      <el-table-column label="Upload" width="90" align="right">
+      <el-table-column :label="t('detail.upload')" width="90" align="right">
         <template #default="{ row }">
           {{ formatSpeed(row.uploadSpeed) }}
         </template>
       </el-table-column>
-      <el-table-column label="Seeder" width="60" align="center">
+      <el-table-column :label="t('detail.seeder')" width="60" align="center">
         <template #default="{ row }">
           <el-icon v-if="row.seeder === 'true'" color="var(--el-color-success)">
             <Check />

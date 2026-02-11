@@ -155,8 +155,9 @@ impl AppConfig {
             "--enable-dht=true".to_string(),
             "--enable-dht6=true".to_string(),
             format!("--enable-peer-exchange=true"),
-            "--bt-enable-lpd=true".to_string(),
-            "--follow-torrent=true".to_string(),
+            format!("--bt-enable-lpd=true"),
+            // Note: --enable-upnp is not supported in this aria2c build
+            "--follow-torrent=false".to_string(),
             "--check-certificate=false".to_string(),
             format!("--max-overall-download-limit={}", self.max_overall_download_limit),
             format!("--max-overall-upload-limit={}", self.max_overall_upload_limit),

@@ -98,6 +98,7 @@ fn main() {
             commands::save_app_config,
             commands::add_uri,
             commands::add_torrent,
+            commands::add_torrent_file,
             commands::pause_task,
             commands::resume_task,
             commands::remove_task,

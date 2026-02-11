@@ -11,7 +11,7 @@ const appStore = useAppStore()
 const isDragging = ref(false)
 
 function isUrl(text: string): boolean {
-  return /^(https?|ftp|magnet|thunder):/.test(text.trim())
+  return /^(https?|ftp|magnet|thunder):\/?/i.test(text.trim())
 }
 
 function isTorrentFile(name: string): boolean {
@@ -31,7 +31,12 @@ async function handleDrop(e: DragEvent) {
       if (isTorrentFile(file.name)) {
         try {
           const buffer = await file.arrayBuffer()
-          const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)))
+          const bytes = new Uint8Array(buffer)
+          let binary = ''
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i])
+          }
+          const base64 = btoa(binary)
           await taskStore.addTorrent(base64, { dir: appStore.downloadDir })
           ElMessage.success(`${t('dialog.addTask')}: ${file.name}`)
         } catch (error) {

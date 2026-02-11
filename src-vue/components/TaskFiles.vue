@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { TaskFile } from '@/types'
 import { formatBytes, calcProgress } from '@/utils'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   files: TaskFile[]
@@ -30,7 +33,7 @@ const fileList = computed(() => {
 <template>
   <div class="task-files">
     <div v-if="fileList.length === 0" class="empty">
-      <el-empty description="No files" :image-size="60" />
+      <el-empty :description="t('detail.noFiles')" :image-size="60" />
     </div>
     <div v-else class="file-list">
       <div

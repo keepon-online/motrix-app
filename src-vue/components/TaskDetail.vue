@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, watch, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { invoke } from '@tauri-apps/api/core'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useTaskStore } from '@/stores/task'
 import { formatBytes, formatSpeed, formatDuration, calcProgress, calcRemainingTime, getTaskName, isBtTask } from '@/utils'
 import TaskFiles from './TaskFiles.vue'
@@ -102,6 +104,77 @@ const statusType = computed((): 'info' | 'success' | 'warning' | 'primary' | 'da
   return typeMap[task.value.status] || 'info'
 })
 
+const isActive = computed(() => task.value?.status === 'active')
+const isPaused = computed(() => task.value?.status === 'paused' || task.value?.status === 'waiting')
+const isComplete = computed(() => task.value?.status === 'complete')
+
+const firstFilePath = computed(() => {
+  if (task.value?.files?.[0]?.path) return task.value.files[0].path
+  return ''
+})
+
+async function handlePause() {
+  if (!task.value) return
+  try {
+    await taskStore.pauseTask(task.value.gid)
+  } catch {
+    ElMessage.error(t('detail.pauseFailed'))
+  }
+}
+
+async function handleResume() {
+  if (!task.value) return
+  try {
+    await taskStore.resumeTask(task.value.gid)
+  } catch {
+    ElMessage.error(t('detail.resumeFailed'))
+  }
+}
+
+async function handleRemove() {
+  if (!task.value) return
+  try {
+    await ElMessageBox.confirm(t('task.removeConfirm'), {
+      confirmButtonText: t('task.remove'),
+      cancelButtonText: t('dialog.cancel'),
+      type: 'warning',
+    })
+    await taskStore.removeTask(task.value.gid)
+  } catch {
+    // cancelled or error
+  }
+}
+
+async function handleOpenFile() {
+  if (!firstFilePath.value) return
+  try {
+    await invoke('open_file', { path: firstFilePath.value })
+  } catch {
+    ElMessage.error(t('task.failedOpenFile'))
+  }
+}
+
+async function handleShowInFolder() {
+  const path = firstFilePath.value || task.value?.dir
+  if (!path) return
+  try {
+    await invoke('show_in_folder', { path })
+  } catch {
+    ElMessage.error(t('task.failedOpenFolder'))
+  }
+}
+
+async function handleCopyLink() {
+  if (!taskUrl.value) return
+  try {
+    const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
+    await writeText(taskUrl.value)
+    ElMessage.success(t('task.linkCopied'))
+  } catch {
+    ElMessage.error(t('task.failedCopyLink'))
+  }
+}
+
 function close() {
   taskStore.hideTaskDetail()
 }
@@ -121,6 +194,34 @@ function close() {
         <div class="detail-header">
           <h3 class="task-name">{{ taskName }}</h3>
           <el-tag :type="statusType" size="small">{{ statusText }}</el-tag>
+        </div>
+
+        <!-- Actions -->
+        <div class="detail-actions">
+          <el-button v-if="isActive" @click="handlePause" size="small">
+            <el-icon><VideoPause /></el-icon>
+            {{ t('task.pause') }}
+          </el-button>
+          <el-button v-if="isPaused" type="primary" @click="handleResume" size="small">
+            <el-icon><VideoPlay /></el-icon>
+            {{ t('task.resume') }}
+          </el-button>
+          <el-button v-if="isComplete && firstFilePath" @click="handleOpenFile" size="small">
+            <el-icon><Document /></el-icon>
+            {{ t('task.openFile') }}
+          </el-button>
+          <el-button v-if="firstFilePath || task.dir" @click="handleShowInFolder" size="small">
+            <el-icon><FolderOpened /></el-icon>
+            {{ t('task.showInFolder') }}
+          </el-button>
+          <el-button v-if="taskUrl" @click="handleCopyLink" size="small">
+            <el-icon><CopyDocument /></el-icon>
+            {{ t('task.copyLink') }}
+          </el-button>
+          <el-button type="danger" @click="handleRemove" size="small">
+            <el-icon><Delete /></el-icon>
+            {{ t('task.remove') }}
+          </el-button>
         </div>
 
         <!-- Progress -->
@@ -241,6 +342,13 @@ function close() {
     margin: 0;
     word-break: break-all;
   }
+}
+
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
 }
 
 .detail-section {

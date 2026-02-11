@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Task } from '@/types'
-import { computed } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
@@ -8,6 +8,48 @@ import { ElMessage } from 'element-plus'
 import { formatBytes, formatSpeed, formatDuration, calcProgress, calcRemainingTime, getTaskName } from '@/utils'
 
 const { t } = useI18n()
+
+// Context menu state
+const contextMenuVisible = ref(false)
+const contextMenuX = ref(0)
+const contextMenuY = ref(0)
+
+function showContextMenu(e: MouseEvent) {
+  contextMenuX.value = e.clientX
+  contextMenuY.value = e.clientY
+  contextMenuVisible.value = true
+}
+
+function hideContextMenu() {
+  contextMenuVisible.value = false
+}
+
+function onContextMenuAction(action: string) {
+  hideContextMenu()
+  switch (action) {
+    case 'pause': emit('pause'); break
+    case 'resume': emit('resume'); break
+    case 'openFile': openFile(); break
+    case 'showInFolder': showInFolder(); break
+    case 'copyLink': copyLink(); break
+    case 'showDetail': emit('showDetail'); break
+    case 'remove': emit('remove'); break
+  }
+}
+
+function onClickOutside() {
+  if (contextMenuVisible.value) {
+    hideContextMenu()
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', onClickOutside)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', onClickOutside)
+})
 
 const props = defineProps<{
   task: Task
@@ -105,6 +147,7 @@ async function copyLink() {
     :class="[statusClass, { selected }]"
     @click="emit('click')"
     @dblclick="emit('showDetail')"
+    @contextmenu.prevent="showContextMenu"
   >
     <div class="task-checkbox" @click.stop="emit('select')">
       <el-checkbox :model-value="selected" />
@@ -118,7 +161,7 @@ async function copyLink() {
           <el-icon><Download /></el-icon> {{ downloadSpeed }}
           <el-icon style="margin-left: 8px"><Upload /></el-icon> {{ uploadSpeed }}
         </span>
-        <span v-if="isActive" class="task-eta">ETA: {{ remainingTime }}</span>
+        <span v-if="isActive" class="task-eta">{{ t('detail.eta') }}: {{ remainingTime }}</span>
         <span v-if="!isActive" class="task-status">{{ statusText }}</span>
       </div>
       <el-progress
@@ -186,6 +229,48 @@ async function copyLink() {
         <el-icon><Delete /></el-icon>
       </el-button>
     </div>
+
+    <!-- Context Menu -->
+    <Teleport to="body">
+      <div
+        v-if="contextMenuVisible"
+        class="context-menu"
+        :style="{ left: contextMenuX + 'px', top: contextMenuY + 'px' }"
+        @contextmenu.prevent
+      >
+        <div v-if="isActive" class="context-menu-item" @click="onContextMenuAction('pause')">
+          <el-icon><VideoPause /></el-icon>
+          <span>{{ t('task.pause') }}</span>
+        </div>
+        <div v-if="isPaused" class="context-menu-item" @click="onContextMenuAction('resume')">
+          <el-icon><VideoPlay /></el-icon>
+          <span>{{ t('task.resume') }}</span>
+        </div>
+        <div class="context-menu-divider" v-if="isActive || isPaused" />
+        <div v-if="isComplete && firstFilePath" class="context-menu-item" @click="onContextMenuAction('openFile')">
+          <el-icon><Document /></el-icon>
+          <span>{{ t('task.openFile') }}</span>
+        </div>
+        <div v-if="firstFilePath || task.dir" class="context-menu-item" @click="onContextMenuAction('showInFolder')">
+          <el-icon><FolderOpened /></el-icon>
+          <span>{{ t('task.showInFolder') }}</span>
+        </div>
+        <div v-if="taskUrl" class="context-menu-item" @click="onContextMenuAction('copyLink')">
+          <el-icon><CopyDocument /></el-icon>
+          <span>{{ t('task.copyLink') }}</span>
+        </div>
+        <div class="context-menu-divider" />
+        <div class="context-menu-item" @click="onContextMenuAction('showDetail')">
+          <el-icon><InfoFilled /></el-icon>
+          <span>{{ t('detail.title') }}</span>
+        </div>
+        <div class="context-menu-divider" />
+        <div class="context-menu-item danger" @click="onContextMenuAction('remove')">
+          <el-icon><Delete /></el-icon>
+          <span>{{ t('task.remove') }}</span>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -257,5 +342,48 @@ async function copyLink() {
   display: flex;
   gap: 8px;
   flex-shrink: 0;
+}
+</style>
+
+<style lang="scss">
+.context-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 180px;
+  background: var(--el-bg-color-overlay);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+  padding: 4px 0;
+  box-shadow: var(--el-box-shadow-light);
+
+  .context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    font-size: 13px;
+    color: var(--el-text-color-regular);
+    cursor: pointer;
+    transition: background 0.15s;
+
+    &:hover {
+      background: var(--el-fill-color-light);
+      color: var(--el-text-color-primary);
+    }
+
+    &.danger {
+      color: var(--el-color-danger);
+
+      &:hover {
+        background: var(--el-color-danger-light-9);
+      }
+    }
+  }
+
+  .context-menu-divider {
+    height: 1px;
+    background: var(--el-border-color-lighter);
+    margin: 4px 0;
+  }
 }
 </style>

@@ -1,8 +1,27 @@
 <script setup lang="ts">
+import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { open } from '@tauri-apps/plugin-shell'
+import { getVersion } from '@tauri-apps/api/app'
+import { invoke } from '@tauri-apps/api/core'
 
 const { t } = useI18n()
+const appVersion = ref('')
+const aria2Version = ref('')
+
+onMounted(async () => {
+  try {
+    appVersion.value = await getVersion()
+  } catch {
+    appVersion.value = '2.0.0'
+  }
+  try {
+    const info = await invoke<{ version: string }>('get_engine_version')
+    aria2Version.value = info.version
+  } catch {
+    // aria2 may not be ready yet
+  }
+})
 </script>
 
 <template>
@@ -12,7 +31,7 @@ const { t } = useI18n()
     </div>
 
     <h1 class="about-title">{{ t('app.name') }}</h1>
-    <p class="about-version">{{ t('app.version') }}</p>
+    <p class="about-version">v{{ appVersion }}</p>
     <p class="about-description">{{ t('app.description') }}</p>
 
     <div class="about-tech">
@@ -21,7 +40,8 @@ const { t } = useI18n()
         <el-tag>Tauri 2.0</el-tag>
         <el-tag>Vue 3</el-tag>
         <el-tag>Vite</el-tag>
-        <el-tag>Aria2</el-tag>
+        <el-tag v-if="aria2Version">Aria2 {{ aria2Version }}</el-tag>
+        <el-tag v-else>Aria2</el-tag>
         <el-tag>Rust</el-tag>
       </div>
     </div>

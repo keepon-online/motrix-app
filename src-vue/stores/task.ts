@@ -195,19 +195,30 @@ export const useTaskStore = defineStore('task', () => {
 
   // Batch operations
   async function pauseSelectedTasks() {
-    for (const gid of selectedGids.value) {
-      await pauseTask(gid)
-    }
+    const gids = [...selectedGids.value]
+    await Promise.all(gids.map(gid => {
+      const task = tasks.value.find(t => t.gid === gid)
+      const isBT = task?.bittorrent !== undefined
+      return invoke(isBT ? 'force_pause_task' : 'pause_task', { gid }).catch(e =>
+        console.error(`Failed to pause ${gid}:`, e)
+      )
+    }))
+    await fetchTasks()
   }
 
   async function resumeSelectedTasks() {
-    for (const gid of selectedGids.value) {
-      await resumeTask(gid)
-    }
+    const gids = [...selectedGids.value]
+    await Promise.all(gids.map(gid =>
+      invoke('resume_task', { gid }).catch(e =>
+        console.error(`Failed to resume ${gid}:`, e)
+      )
+    ))
+    await fetchTasks()
   }
 
   async function removeSelectedTasks(deleteFiles = false) {
-    for (const gid of selectedGids.value) {
+    const gids = [...selectedGids.value]
+    for (const gid of gids) {
       await removeTask(gid, deleteFiles)
     }
     clearSelection()
