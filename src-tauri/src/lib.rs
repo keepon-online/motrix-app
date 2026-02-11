@@ -6,6 +6,7 @@ pub mod cli;
 pub mod commands;
 pub mod config;
 pub mod error;
+pub mod power;
 pub mod tray;
 
 pub use error::{Error, Result};

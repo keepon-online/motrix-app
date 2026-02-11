@@ -48,6 +48,7 @@ export function useAria2Events() {
     switch (event.eventType) {
       case 'download_start':
         taskStore.fetchTasks('active')
+        invoke('prevent_sleep').catch(() => {})
         break
 
       case 'download_pause':
@@ -57,6 +58,7 @@ export function useAria2Events() {
       case 'download_stop':
         taskStore.fetchTasks('active')
         taskStore.fetchTasks('stopped')
+        checkAndAllowSleep()
         break
 
       case 'download_complete':
@@ -79,6 +81,7 @@ export function useAria2Events() {
         if (appStore.config?.autoClearCompleted) {
           taskStore.removeTaskRecord(event.gid).catch(() => {})
         }
+        checkAndAllowSleep()
         break
 
       case 'download_error':
@@ -94,7 +97,19 @@ export function useAria2Events() {
         }
         taskStore.fetchTasks('active')
         taskStore.fetchTasks('stopped')
+        checkAndAllowSleep()
         break
+    }
+  }
+
+  async function checkAndAllowSleep() {
+    try {
+      const stat = await invoke<{ numActive: string }>('get_global_stat')
+      if (parseInt(stat.numActive || '0') === 0) {
+        invoke('allow_sleep').catch(() => {})
+      }
+    } catch {
+      // ignore
     }
   }
 

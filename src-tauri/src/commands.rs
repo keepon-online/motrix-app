@@ -439,3 +439,19 @@ pub async fn update_tray_menu(app: tauri::AppHandle, labels: TrayLabels) -> Resu
         .map_err(|e| Error::Custom(format!("Failed to update tray menu: {}", e)))?;
     Ok(())
 }
+
+/// Prevent system sleep (during active downloads)
+#[tauri::command]
+pub async fn prevent_sleep() -> Result<()> {
+    crate::power::prevent_sleep()
+        .map_err(|e| Error::Custom(format!("Failed to prevent sleep: {}", e)))?;
+    Ok(())
+}
+
+/// Allow system sleep (when no active downloads)
+#[tauri::command]
+pub async fn allow_sleep() -> Result<()> {
+    crate::power::allow_sleep()
+        .map_err(|e| Error::Custom(format!("Failed to allow sleep: {}", e)))?;
+    Ok(())
+}
