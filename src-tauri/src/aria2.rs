@@ -69,23 +69,21 @@ static ARIA2_PROCESS: Mutex<Option<tauri_plugin_shell::process::CommandChild>> =
 /// Initialize aria2 engine
 pub async fn init_engine(app: &AppHandle) -> Result<()> {
     use tauri_plugin_store::StoreExt;
+    use crate::config::AppConfig;
 
-    // Load config from store (config is nested under "config" key)
+    // Load full config from store
     let store = app.store("config.json")?;
-    let (port, secret) = if let Some(config_val) = store.get("config") {
-        let port = config_val.get("rpcPort")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(16800) as u16;
-        let secret = config_val.get("rpcSecret")
-            .and_then(|v| v.as_str().map(String::from))
-            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-        (port, secret)
+    let config: AppConfig = if let Some(config_val) = store.get("config") {
+        serde_json::from_value(config_val.clone()).unwrap_or_default()
     } else {
-        (16800u16, uuid::Uuid::new_v4().to_string())
+        AppConfig::default()
     };
 
-    // Start aria2 process
-    start_aria2_process(app, port, &secret).await?;
+    let port = config.rpc_port;
+    let secret = config.rpc_secret.clone();
+
+    // Start aria2 process using config
+    start_aria2_process(app, &config).await?;
 
     // Wait for aria2 to start
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
@@ -103,7 +101,7 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
 }
 
 /// Start aria2 process
-async fn start_aria2_process(app: &AppHandle, port: u16, secret: &str) -> Result<()> {
+async fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Result<()> {
     use tauri_plugin_shell::ShellExt;
 
     let shell = app.shell();
@@ -125,30 +123,16 @@ async fn start_aria2_process(app: &AppHandle, port: u16, secret: &str) -> Result
     let dht_path = app_data_dir.join("dht.dat");
     let dht6_path = app_data_dir.join("dht6.dat");
 
-    // Build aria2 arguments
-    let args = vec![
-        "--enable-rpc=true".to_string(),
-        format!("--rpc-listen-port={}", port),
-        format!("--rpc-secret={}", secret),
-        "--rpc-listen-all=false".to_string(),
-        "--rpc-allow-origin-all=true".to_string(),
-        "--max-concurrent-downloads=10".to_string(),
-        "--max-connection-per-server=16".to_string(),
-        "--split=16".to_string(),
-        "--min-split-size=1M".to_string(),
-        "--enable-dht=true".to_string(),
-        "--enable-dht6=true".to_string(),
-        "--bt-enable-lpd=true".to_string(),
-        "--follow-torrent=true".to_string(),
-        "--check-certificate=false".to_string(),
-        // Session support
+    // Build aria2 arguments from config
+    let mut args = config.to_aria2_args();
+    // Append session and DHT paths (not part of AppConfig)
+    args.extend([
         format!("--save-session={}", session_path.display()),
         format!("--input-file={}", session_path.display()),
         "--save-session-interval=10".to_string(),
-        // DHT data persistence
         format!("--dht-file-path={}", dht_path.display()),
         format!("--dht-file-path6={}", dht6_path.display()),
-    ];
+    ]);
 
     // Spawn aria2c process
     let (mut _rx, child) = shell

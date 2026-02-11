@@ -62,6 +62,7 @@ export interface AppConfig {
   hideOnClose: boolean
   notifyOnComplete: boolean
   autoClearCompleted: boolean
+  resumeAllWhenAppLaunched: boolean
   maxConcurrentDownloads: number
   maxConnectionPerServer: number
   split: number
@@ -75,6 +76,9 @@ export interface AppConfig {
   seedTime: number
   btTracker: string
   trackerSource: string[]
+  btForceEncryption: boolean
+  btRequireCrypto: boolean
+  pauseMetadata: boolean
   userAgent: string
   proxyEnabled: boolean
   proxyType: 'http' | 'https' | 'socks5'
@@ -82,8 +86,15 @@ export interface AppConfig {
   proxyPort: number
   proxyUsername: string
   proxyPassword: string
+  noProxy: string
   rpcPort: number
   rpcSecret: string
+  maxOverallDownloadLimit: string
+  maxOverallUploadLimit: string
+  allowOverwrite: boolean
+  autoFileRenaming: boolean
+  continueDownload: boolean
+  followMetalink: string
 }
 
 export interface ProxyConfig {

@@ -76,7 +76,12 @@ export const useAppStore = defineStore('app', () => {
         split: 'split',
         maxDownloadLimit: 'max-overall-download-limit',
         maxUploadLimit: 'max-overall-upload-limit',
+        maxOverallDownloadLimit: 'max-overall-download-limit',
+        maxOverallUploadLimit: 'max-overall-upload-limit',
         userAgent: 'user-agent',
+        btForceEncryption: 'bt-force-encryption',
+        btRequireCrypto: 'bt-require-crypto',
+        followMetalink: 'follow-metalink',
       }
 
       const engineOptions: Record<string, string> = {}
@@ -115,8 +120,9 @@ export const useAppStore = defineStore('app', () => {
 
   async function resetConfig() {
     const defaults = getDefaultConfig()
-    // Keep locale as current
+    // Keep locale and rpcSecret as current
     defaults.locale = config.value?.locale ?? 'en'
+    defaults.rpcSecret = config.value?.rpcSecret ?? ''
     try {
       await invoke('save_app_config', { config: defaults })
       config.value = defaults
@@ -136,6 +142,7 @@ export const useAppStore = defineStore('app', () => {
       hideOnClose: true,
       notifyOnComplete: true,
       autoClearCompleted: false,
+      resumeAllWhenAppLaunched: true,
       maxConcurrentDownloads: 10,
       maxConnectionPerServer: 16,
       split: 16,
@@ -149,6 +156,9 @@ export const useAppStore = defineStore('app', () => {
       seedTime: 60,
       btTracker: '',
       trackerSource: ['https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt'],
+      btForceEncryption: false,
+      btRequireCrypto: false,
+      pauseMetadata: false,
       userAgent: 'Motrix/2.0.0',
       proxyEnabled: false,
       proxyType: 'http',
@@ -156,8 +166,15 @@ export const useAppStore = defineStore('app', () => {
       proxyPort: 1080,
       proxyUsername: '',
       proxyPassword: '',
+      noProxy: '',
       rpcPort: 16800,
       rpcSecret: '',
+      maxOverallDownloadLimit: '0',
+      maxOverallUploadLimit: '0',
+      allowOverwrite: false,
+      autoFileRenaming: true,
+      continueDownload: true,
+      followMetalink: 'true',
     }
   }
 

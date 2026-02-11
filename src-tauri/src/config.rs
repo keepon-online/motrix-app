@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 /// Application configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct AppConfig {
     // Basic settings
     pub locale: String,
@@ -14,6 +14,7 @@ pub struct AppConfig {
     pub hide_on_close: bool,
     pub notify_on_complete: bool,
     pub auto_clear_completed: bool,
+    pub resume_all_when_app_launched: bool,
 
     // Download settings
     pub max_concurrent_downloads: u32,
@@ -31,11 +32,20 @@ pub struct AppConfig {
     pub seed_time: u32,
     pub bt_tracker: String,
     pub tracker_source: Vec<String>,
+    pub bt_force_encryption: bool,
+    pub bt_require_crypto: bool,
+    pub pause_metadata: bool,
 
     // Advanced settings
     pub user_agent: String,
     pub rpc_port: u16,
     pub rpc_secret: String,
+    pub max_overall_download_limit: String,
+    pub max_overall_upload_limit: String,
+    pub allow_overwrite: bool,
+    pub auto_file_renaming: bool,
+    pub continue_download: bool,
+    pub follow_metalink: String,
 
     // Proxy settings
     pub proxy_enabled: bool,
@@ -44,6 +54,7 @@ pub struct AppConfig {
     pub proxy_port: u16,
     pub proxy_username: String,
     pub proxy_password: String,
+    pub no_proxy: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -77,6 +88,7 @@ impl Default for AppConfig {
             hide_on_close: true,
             notify_on_complete: true,
             auto_clear_completed: false,
+            resume_all_when_app_launched: true,
 
             max_concurrent_downloads: 10,
             max_connection_per_server: 16,
@@ -94,10 +106,19 @@ impl Default for AppConfig {
             tracker_source: vec![
                 "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt".to_string(),
             ],
+            bt_force_encryption: false,
+            bt_require_crypto: false,
+            pause_metadata: false,
 
             user_agent: format!("Motrix/{}", env!("CARGO_PKG_VERSION")),
             rpc_port: 16800,
             rpc_secret: uuid::Uuid::new_v4().to_string(),
+            max_overall_download_limit: "0".to_string(),
+            max_overall_upload_limit: "0".to_string(),
+            allow_overwrite: false,
+            auto_file_renaming: true,
+            continue_download: true,
+            follow_metalink: "true".to_string(),
 
             proxy_enabled: false,
             proxy_type: ProxyType::Http,
@@ -105,6 +126,7 @@ impl Default for AppConfig {
             proxy_port: 1080,
             proxy_username: String::new(),
             proxy_password: String::new(),
+            no_proxy: String::new(),
         }
     }
 }
@@ -136,6 +158,15 @@ impl AppConfig {
             "--bt-enable-lpd=true".to_string(),
             "--follow-torrent=true".to_string(),
             "--check-certificate=false".to_string(),
+            format!("--max-overall-download-limit={}", self.max_overall_download_limit),
+            format!("--max-overall-upload-limit={}", self.max_overall_upload_limit),
+            format!("--allow-overwrite={}", self.allow_overwrite),
+            format!("--auto-file-renaming={}", self.auto_file_renaming),
+            format!("--continue={}", self.continue_download),
+            format!("--bt-force-encryption={}", self.bt_force_encryption),
+            format!("--bt-require-crypto={}", self.bt_require_crypto),
+            format!("--pause-metadata={}", self.pause_metadata),
+            format!("--follow-metalink={}", self.follow_metalink),
         ];
 
         // Add proxy settings if enabled
@@ -152,6 +183,9 @@ impl AppConfig {
             }
             if !self.proxy_password.is_empty() {
                 args.push(format!("--all-proxy-passwd={}", self.proxy_password));
+            }
+            if !self.no_proxy.is_empty() {
+                args.push(format!("--no-proxy={}", self.no_proxy));
             }
         }
 

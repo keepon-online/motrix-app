@@ -3,7 +3,8 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use motrix_lib::{aria2, commands, tray};
+use motrix_lib::{aria2, cli, commands, tray};
+use tauri::{Emitter, Manager};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 fn main() {
@@ -19,6 +20,23 @@ fn main() {
     tracing::info!("Starting Motrix...");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            tracing::info!("Second instance detected with argv: {:?}", argv);
+
+            // Focus existing window
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+                let _ = window.unminimize();
+            }
+
+            // Pass argv URLs/files to frontend
+            let urls = cli::parse_args(&argv);
+            if !urls.is_empty() {
+                let _ = app.emit("open-urls", &urls);
+            }
+        }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_notification::init())
@@ -31,11 +49,45 @@ fn main() {
             // Initialize tray
             tray::create_tray(app)?;
 
+            // Parse command line arguments from first launch
+            let args: Vec<String> = std::env::args().collect();
+            let urls = cli::parse_args(&args);
+            if !urls.is_empty() {
+                let app_handle_cli = app.handle().clone();
+                let urls_clone = urls.clone();
+                tauri::async_runtime::spawn(async move {
+                    // Delay to wait for frontend to be ready
+                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                    let _ = app_handle_cli.emit("open-urls", &urls_clone);
+                });
+            }
+
             // Initialize aria2 engine
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = aria2::init_engine(&app_handle).await {
                     tracing::error!("Failed to initialize aria2 engine: {}", e);
+                    return;
+                }
+
+                // Auto-resume all tasks on launch if configured
+                {
+                    use tauri_plugin_store::StoreExt;
+                    let should_resume = app_handle
+                        .store("config.json")
+                        .ok()
+                        .and_then(|store| store.get("config"))
+                        .and_then(|v| v.get("resumeAllWhenAppLaunched").and_then(|v| v.as_bool()))
+                        .unwrap_or(true);
+
+                    if should_resume {
+                        if let Ok(client) = aria2::get_client().await {
+                            match client.unpause_all().await {
+                                Ok(_) => tracing::info!("Auto-resumed all tasks on launch"),
+                                Err(e) => tracing::warn!("Failed to auto-resume tasks: {}", e),
+                            }
+                        }
+                    }
                 }
             });
 
@@ -69,7 +121,27 @@ fn main() {
             commands::fetch_tracker_list,
             commands::update_tray_menu,
             commands::delete_task_files,
+            commands::parse_torrent_file,
         ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                use tauri_plugin_store::StoreExt;
+
+                // Read hideOnClose config
+                let hide_on_close = window.app_handle()
+                    .store("config.json")
+                    .ok()
+                    .and_then(|store| store.get("config"))
+                    .and_then(|config_val| config_val.get("hideOnClose").and_then(|v| v.as_bool()))
+                    .unwrap_or(true);
+
+                if hide_on_close {
+                    api.prevent_close();
+                    let _ = window.hide();
+                    tracing::info!("Window hidden to tray");
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
