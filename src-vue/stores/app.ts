@@ -50,6 +50,8 @@ export const useAppStore = defineStore('app', () => {
       if (config.value.locale) {
         ;(i18n.global.locale as unknown as { value: string }).value = config.value.locale
       }
+      // Migrate old single tracker source to new multi-source defaults
+      await migrateTrackerSources()
       // Update tray menu with current locale
       await updateTrayMenu()
     } catch (error) {
@@ -58,6 +60,22 @@ export const useAppStore = defineStore('app', () => {
       config.value = getDefaultConfig()
     } finally {
       loading.value = false
+    }
+  }
+
+  const DEFAULT_TRACKER_SOURCES = [
+    'https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all.txt',
+    'https://raw.githubusercontent.com/XIU2/TrackersListCollection/master/all.txt',
+    'https://raw.githubusercontent.com/DeSireFire/animeTrackerList/master/AT_all.txt',
+  ]
+
+  async function migrateTrackerSources() {
+    if (!config.value) return
+    const sources = config.value.trackerSource
+    // Migrate if user still has only the old single default source
+    const oldDefault = 'https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt'
+    if (sources.length === 1 && sources[0] === oldDefault) {
+      await saveConfig({ trackerSource: DEFAULT_TRACKER_SOURCES, lastTrackerUpdate: 0 })
     }
   }
 
