@@ -126,8 +126,7 @@ onUnmounted(() => {
     <TaskToolbar v-if="taskStore.tasks.length > 0" />
 
     <div class="tasks-list">
-      <div v-if="taskStore.loading" class="tasks-loading" v-loading="true" />
-      <template v-else-if="taskStore.tasks.length > 0">
+      <template v-if="taskStore.tasks.length > 0">
         <TaskItem
           v-for="task in taskStore.tasks"
           :key="task.gid"
@@ -177,9 +176,5 @@ onUnmounted(() => {
 .tasks-list {
   flex: 1;
   overflow-y: auto;
-}
-
-.tasks-loading {
-  height: 200px;
 }
 </style>
