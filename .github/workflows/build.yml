@@ -69,13 +69,15 @@ jobs:
 
       - name: Build aria2c from source
         run: |
-          curl -L "https://github.com/aria2/aria2/releases/download/release-${{ env.ARIA2_VERSION }}/aria2-${{ env.ARIA2_VERSION }}.tar.xz" -o aria2.tar.xz
+          set -e
+          curl -fSL "https://github.com/aria2/aria2/releases/download/release-${{ env.ARIA2_VERSION }}/aria2-${{ env.ARIA2_VERSION }}.tar.xz" -o aria2.tar.xz
           tar xf aria2.tar.xz
           cd aria2-${{ env.ARIA2_VERSION }}
           autoreconf -i
           ./configure --without-gnutls --with-openssl --without-libgcrypt
           make -j$(nproc)
-          cd ..
+          test -f src/aria2c || { echo "::error::aria2c binary not found after build"; exit 1; }
+          ./src/aria2c --version
 
       - name: Prepare aria2c sidecar
         run: |
@@ -132,13 +134,15 @@ jobs:
 
       - name: Build aria2c from source
         run: |
-          curl -L "https://github.com/aria2/aria2/releases/download/release-${{ env.ARIA2_VERSION }}/aria2-${{ env.ARIA2_VERSION }}.tar.xz" -o aria2.tar.xz
+          set -e
+          curl -fSL "https://github.com/aria2/aria2/releases/download/release-${{ env.ARIA2_VERSION }}/aria2-${{ env.ARIA2_VERSION }}.tar.xz" -o aria2.tar.xz
           tar xf aria2.tar.xz
           cd aria2-${{ env.ARIA2_VERSION }}
           autoreconf -i
           ./configure --without-gnutls --with-appletls --without-libgcrypt
           make -j$(sysctl -n hw.ncpu)
-          cd ..
+          test -f src/aria2c || { echo "::error::aria2c binary not found after build"; exit 1; }
+          ./src/aria2c --version
 
       - name: Prepare aria2c sidecar
         run: |
@@ -187,11 +191,17 @@ jobs:
       - name: Download aria2c for Windows
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Force -Path src-tauri/binaries
           $url = "https://github.com/aria2/aria2/releases/download/release-${{ env.ARIA2_VERSION }}/aria2-${{ env.ARIA2_VERSION }}-win-64bit-build1.zip"
           Invoke-WebRequest -Uri $url -OutFile aria2.zip
           Expand-Archive -Path aria2.zip -DestinationPath aria2-extracted
           Copy-Item "aria2-extracted/aria2-${{ env.ARIA2_VERSION }}-win-64bit-build1/aria2c.exe" "src-tauri/binaries/aria2c-x86_64-pc-windows-msvc.exe"
+          if (-not (Test-Path "src-tauri/binaries/aria2c-x86_64-pc-windows-msvc.exe")) {
+            Write-Error "aria2c.exe not found after download"
+            exit 1
+          }
+          & "src-tauri/binaries/aria2c-x86_64-pc-windows-msvc.exe" --version
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
