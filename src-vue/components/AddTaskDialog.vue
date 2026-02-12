@@ -7,7 +7,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage } from 'element-plus'
-import { formatBytes, decodeThunderUrl } from '@/utils'
+import { formatBytes, decodeThunderUrl, parseCurlCommand } from '@/utils'
 
 interface TorrentFileInfo {
   index: number
@@ -185,16 +185,35 @@ async function submit() {
 
   try {
     if (activeTab.value === 'uri') {
-      const uris = uriInput.value
-        .split('\n')
-        .map((u) => u.trim())
-        .filter((u) => u.length > 0)
-        .map((u) => decodeThunderUrl(u))
+      // Try cURL parsing first
+      const curlResult = parseCurlCommand(uriInput.value)
+      if (curlResult) {
+        const curlOptions = { ...options }
+        if (curlResult.headers['User-Agent']) curlOptions['user-agent'] = curlResult.headers['User-Agent']
+        if (curlResult.headers['Referer']) curlOptions.referer = curlResult.headers['Referer']
+        if (curlResult.headers['Cookie']) curlOptions.header = [`Cookie: ${curlResult.headers['Cookie']}`]
+        if (curlResult.output) curlOptions.out = curlResult.output
+        // Collect remaining headers
+        const extraHeaders: string[] = (curlOptions.header as string[] || [])
+        for (const [key, value] of Object.entries(curlResult.headers)) {
+          if (!['User-Agent', 'Referer', 'Cookie'].includes(key)) {
+            extraHeaders.push(`${key}: ${value}`)
+          }
+        }
+        if (extraHeaders.length > 0) curlOptions.header = extraHeaders
+        await taskStore.addUri([curlResult.url], curlOptions)
+      } else {
+        const uris = uriInput.value
+          .split('\n')
+          .map((u) => u.trim())
+          .filter((u) => u.length > 0)
+          .map((u) => decodeThunderUrl(u))
 
-      if (uris.length === 0) return
+        if (uris.length === 0) return
 
-      for (const uri of uris) {
-        await taskStore.addUri([uri], options)
+        for (const uri of uris) {
+          await taskStore.addUri([uri], options)
+        }
       }
     } else if (activeTab.value === 'metalink' && metalinkFilePath.value) {
       await invoke('add_metalink_file', { filePath: metalinkFilePath.value, options })

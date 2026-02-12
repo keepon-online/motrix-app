@@ -202,10 +202,17 @@ async fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig)
 
     let shell = app.shell();
 
-    // Ensure session directory exists
-    let app_data_dir = app.path()
-        .app_data_dir()
-        .map_err(|e| Error::Custom(format!("Failed to get app data dir: {}", e)))?;
+    // Ensure session directory exists — use portable dir if available
+    let app_data_dir = {
+        let portable = app.state::<crate::commands::PortableDataDir>();
+        if let Some(ref dir) = portable.0 {
+            dir.clone()
+        } else {
+            app.path()
+                .app_data_dir()
+                .map_err(|e| Error::Custom(format!("Failed to get app data dir: {}", e)))?
+        }
+    };
     std::fs::create_dir_all(&app_data_dir)
         .map_err(|e| Error::Custom(format!("Failed to create app data dir: {}", e)))?;
 

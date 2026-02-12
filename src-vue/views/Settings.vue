@@ -6,6 +6,7 @@ import { useTheme } from '@/composables/useTheme'
 import { open } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import type { AppDataPaths } from '@/types'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -13,6 +14,13 @@ const { setTheme } = useTheme()
 
 const trackerInput = ref('')
 const trackerUpdating = ref(false)
+const showRpcSecret = ref(false)
+const appDataPaths = ref<AppDataPaths | null>(null)
+const logPath = ref('')
+
+// Load paths on mount
+invoke<string>('get_log_path').then(p => logPath.value = p).catch(() => {})
+invoke<AppDataPaths>('get_app_data_paths').then(p => appDataPaths.value = p).catch(() => {})
 
 // Extract friendly name from tracker source URL
 function getSourceName(url: string): string {
@@ -203,6 +211,73 @@ async function importConfig() {
   } catch (e) {
     console.error('Failed to import config:', e)
     ElMessage.error(String(e))
+  }
+}
+
+async function copyRpcSecret() {
+  try {
+    const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
+    await writeText(appStore.config?.rpcSecret ?? '')
+    ElMessage.success(t('settings.rpcSecretCopied'))
+  } catch {
+    ElMessage.error('Failed to copy')
+  }
+}
+
+function regenerateRpcSecret() {
+  const newSecret = crypto.randomUUID()
+  appStore.saveConfig({ rpcSecret: newSecret })
+  ElMessage.success(t('settings.rpcSecretRegenerated'))
+}
+
+async function openLogDir() {
+  if (logPath.value) {
+    try {
+      await invoke('open_file', { path: logPath.value })
+    } catch {
+      ElMessage.error(t('task.failedOpenFolder'))
+    }
+  }
+}
+
+async function openAppDataDir() {
+  if (appDataPaths.value?.appDataDir) {
+    try {
+      await invoke('open_file', { path: appDataPaths.value.appDataDir })
+    } catch {
+      ElMessage.error(t('task.failedOpenFolder'))
+    }
+  }
+}
+
+async function clearSession() {
+  try {
+    await ElMessageBox.confirm(
+      t('settings.clearSessionConfirm'),
+      t('settings.clearSession'),
+      { confirmButtonText: t('settings.clearSession'), cancelButtonText: t('dialog.cancel'), type: 'warning' }
+    )
+    await invoke('clear_session')
+    ElMessage.success(t('settings.clearSessionSuccess'))
+  } catch {
+    // User cancelled
+  }
+}
+
+async function factoryReset() {
+  try {
+    await ElMessageBox.confirm(
+      t('settings.factoryResetConfirm'),
+      t('settings.factoryReset'),
+      { confirmButtonText: t('settings.factoryReset'), cancelButtonText: t('dialog.cancel'), type: 'error' }
+    )
+    await invoke('factory_reset')
+    ElMessage.success(t('settings.factoryResetSuccess'))
+    // Restart app
+    const { relaunch } = await import('@tauri-apps/plugin-process')
+    await relaunch()
+  } catch {
+    // User cancelled
   }
 }
 </script>
@@ -522,6 +597,18 @@ async function importConfig() {
             </el-select>
           </el-form-item>
 
+          <el-form-item :label="t('settings.proxyScope')">
+            <el-select
+              :model-value="appStore.config?.proxyScope || 'all'"
+              @change="(val: string) => appStore.saveConfig({ proxyScope: val as 'all' | 'http' | 'https' | 'ftp' })"
+            >
+              <el-option :label="t('settings.proxyScopeAll')" value="all" />
+              <el-option label="HTTP" value="http" />
+              <el-option label="HTTPS" value="https" />
+              <el-option label="FTP" value="ftp" />
+            </el-select>
+          </el-form-item>
+
           <el-form-item :label="t('settings.proxyHost')">
             <el-input
               :model-value="appStore.config?.proxyHost"
@@ -619,6 +706,18 @@ async function importConfig() {
           <div class="form-tip">{{ t('settings.rpcPortTip') }}</div>
         </el-form-item>
 
+        <el-form-item :label="t('settings.runMode')">
+          <el-radio-group
+            :model-value="appStore.config?.runMode || 'tray'"
+            @change="(val: string | number | boolean | undefined) => appStore.saveConfig({ runMode: (val || 'tray') as 'standard' | 'tray' | 'hide_tray' })"
+          >
+            <el-radio-button value="standard">{{ t('settings.runModeStandard') }}</el-radio-button>
+            <el-radio-button value="tray">{{ t('settings.runModeTray') }}</el-radio-button>
+            <el-radio-button value="hide_tray">{{ t('settings.runModeHideTray') }}</el-radio-button>
+          </el-radio-group>
+          <div class="form-tip">{{ t('settings.runModeTip') }}</div>
+        </el-form-item>
+
         <el-form-item :label="t('settings.hideOnClose')">
           <el-switch
             :model-value="appStore.config?.hideOnClose"
@@ -660,6 +759,62 @@ async function importConfig() {
             :model-value="appStore.config?.resumeAllWhenAppLaunched"
             @change="(val: string | number | boolean) => appStore.saveConfig({ resumeAllWhenAppLaunched: Boolean(val) })"
           />
+        </el-form-item>
+
+        <el-form-item :label="t('settings.rpcSecret')">
+          <el-input
+            :model-value="appStore.config?.rpcSecret"
+            :type="showRpcSecret ? 'text' : 'password'"
+            readonly
+            style="max-width: 320px"
+          >
+            <template #append>
+              <el-button @click="showRpcSecret = !showRpcSecret">
+                <el-icon><View v-if="!showRpcSecret" /><Hide v-else /></el-icon>
+              </el-button>
+              <el-button @click="copyRpcSecret">
+                <el-icon><CopyDocument /></el-icon>
+              </el-button>
+              <el-button @click="regenerateRpcSecret">
+                <el-icon><Refresh /></el-icon>
+              </el-button>
+            </template>
+          </el-input>
+          <div class="form-tip">{{ t('settings.rpcSecretTip') }}</div>
+        </el-form-item>
+
+        <!-- Developer Tools -->
+        <h3 class="settings-section">{{ t('settings.developerTools') }}</h3>
+
+        <el-form-item :label="t('settings.appDataDir')">
+          <el-input :model-value="appDataPaths?.appDataDir" readonly>
+            <template #append>
+              <el-button @click="openAppDataDir">
+                <el-icon><FolderOpened /></el-icon>
+              </el-button>
+            </template>
+          </el-input>
+        </el-form-item>
+
+        <el-form-item :label="t('settings.logDir')">
+          <el-input :model-value="logPath" readonly>
+            <template #append>
+              <el-button @click="openLogDir">
+                <el-icon><FolderOpened /></el-icon>
+              </el-button>
+            </template>
+          </el-input>
+        </el-form-item>
+
+        <el-form-item :label="t('settings.sessionReset')">
+          <div class="reset-buttons">
+            <el-button @click="clearSession">
+              {{ t('settings.clearSession') }}
+            </el-button>
+            <el-button type="danger" @click="factoryReset">
+              {{ t('settings.factoryReset') }}
+            </el-button>
+          </div>
         </el-form-item>
       </el-form>
     </div>
@@ -779,5 +934,10 @@ async function importConfig() {
   margin-left: 8px;
   font-size: 13px;
   color: var(--el-text-color-secondary);
+}
+
+.reset-buttons {
+  display: flex;
+  gap: 8px;
 }
 </style>

@@ -3,21 +3,53 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use motrix_lib::{aria2, cli, commands, tray};
+use motrix_lib::{aria2, cli, commands, menu, tray};
 use tauri::{Emitter, Manager};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 fn main() {
-    // Initialize logging
+    // Check for portable mode (marker file next to executable)
+    let portable_data_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
+        .and_then(|dir| {
+            if dir.join("portable").exists() || dir.join(".portable").exists() {
+                Some(dir.join("data"))
+            } else {
+                None
+            }
+        });
+
+    // Determine log directory early (before Tauri app setup)
+    let log_dir = if let Some(ref portable) = portable_data_dir {
+        portable.join("logs")
+    } else {
+        dirs::data_dir()
+            .map(|d| d.join("app.motrix.native").join("logs"))
+            .unwrap_or_else(|| std::path::PathBuf::from("logs"))
+    };
+    let _ = std::fs::create_dir_all(&log_dir);
+
+    // Create rolling daily file appender
+    let file_appender = tracing_appender::rolling::daily(&log_dir, "motrix.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
+    // Initialize logging with both console and file output
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "motrix=debug,tauri=info".into()),
         )
         .with(tracing_subscriber::fmt::layer())
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(non_blocking)
+                .with_ansi(false),
+        )
         .init();
 
     tracing::info!("Starting Motrix...");
+    tracing::info!("Log directory: {}", log_dir.display());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
@@ -48,9 +80,19 @@ fn main() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::new().build())
-        .setup(|app| {
+        .setup(move |app| {
+            // Store log dir path for the get_log_path command
+            let app_log_dir = app.path().app_log_dir().unwrap_or_else(|_| log_dir.clone());
+            app.manage(commands::LogDir(app_log_dir));
+
+            // Store portable data dir for aria2 and other commands
+            app.manage(commands::PortableDataDir(portable_data_dir.clone()));
+
             // Initialize tray
             tray::create_tray(app)?;
+
+            // Build application menu
+            menu::build_menu(app)?;
 
             // Hide window on startup if configured
             {
@@ -149,23 +191,42 @@ fn main() {
             commands::prevent_sleep,
             commands::allow_sleep,
             commands::change_task_position,
+            commands::get_log_path,
+            commands::get_app_data_paths,
+            commands::clear_session,
+            commands::factory_reset,
+            commands::set_window_progress,
+            commands::set_dock_badge,
+            commands::bounce_dock,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 use tauri_plugin_store::StoreExt;
 
-                // Read hideOnClose config
-                let hide_on_close = window.app_handle()
+                // Read runMode config (standard / tray / hide_tray)
+                let run_mode = window.app_handle()
                     .store("config.json")
                     .ok()
                     .and_then(|store| store.get("config"))
-                    .and_then(|config_val| config_val.get("hideOnClose").and_then(|v| v.as_bool()))
-                    .unwrap_or(true);
+                    .and_then(|config_val| config_val.get("runMode").and_then(|v| v.as_str().map(String::from)))
+                    .unwrap_or_else(|| "tray".to_string());
 
-                if hide_on_close {
-                    api.prevent_close();
-                    let _ = window.hide();
-                    tracing::info!("Window hidden to tray");
+                match run_mode.as_str() {
+                    "standard" => {
+                        // Standard mode: just close (default behavior)
+                    }
+                    "hide_tray" => {
+                        // Hide to tray without tray icon visible
+                        api.prevent_close();
+                        let _ = window.hide();
+                        tracing::info!("Window hidden (hide_tray mode)");
+                    }
+                    _ => {
+                        // "tray" mode (default): hide to tray
+                        api.prevent_close();
+                        let _ = window.hide();
+                        tracing::info!("Window hidden to tray");
+                    }
                 }
             }
         })

@@ -9,6 +9,7 @@ import TaskFiles from './TaskFiles.vue'
 import TaskPeers from './TaskPeers.vue'
 import TaskTrackers from './TaskTrackers.vue'
 import TaskActivity from './TaskActivity.vue'
+import TaskBitfield from './TaskBitfield.vue'
 
 const { t } = useI18n()
 const taskStore = useTaskStore()
@@ -298,6 +299,13 @@ function close() {
           </el-tab-pane>
           <el-tab-pane :label="t('detail.files')">
             <TaskFiles :files="task.files" />
+          </el-tab-pane>
+          <el-tab-pane v-if="task.bitfield || task.status === 'active'" label="Bitfield">
+            <TaskBitfield
+              :bitfield="task.bitfield || ''"
+              :total-length="task.totalLength"
+              :completed-length="task.completedLength"
+            />
           </el-tab-pane>
           <el-tab-pane v-if="isBT" :label="t('detail.peers')">
             <TaskPeers :gid="task.gid" />

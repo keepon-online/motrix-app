@@ -15,6 +15,7 @@ pub struct AppConfig {
     pub notify_on_complete: bool,
     pub auto_clear_completed: bool,
     pub resume_all_when_app_launched: bool,
+    pub run_mode: RunMode,
 
     // Download settings
     pub max_concurrent_downloads: u32,
@@ -56,6 +57,7 @@ pub struct AppConfig {
     // Proxy settings
     pub proxy_enabled: bool,
     pub proxy_type: ProxyType,
+    pub proxy_scope: ProxyScope,
     pub proxy_host: String,
     pub proxy_port: u16,
     pub proxy_username: String,
@@ -84,6 +86,25 @@ pub enum ProxyType {
     Socks5,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ProxyScope {
+    #[default]
+    All,
+    Http,
+    Https,
+    Ftp,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RunMode {
+    Standard,
+    #[default]
+    Tray,
+    HideTray,
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         let download_dir = dirs::download_dir().unwrap_or_else(|| PathBuf::from("."));
@@ -98,6 +119,7 @@ impl Default for AppConfig {
             notify_on_complete: true,
             auto_clear_completed: false,
             resume_all_when_app_launched: true,
+            run_mode: RunMode::Tray,
 
             max_concurrent_downloads: 10,
             max_connection_per_server: 16,
@@ -138,6 +160,7 @@ impl Default for AppConfig {
 
             proxy_enabled: false,
             proxy_type: ProxyType::Http,
+            proxy_scope: ProxyScope::All,
             proxy_host: String::new(),
             proxy_port: 1080,
             proxy_username: String::new(),
@@ -198,7 +221,21 @@ impl AppConfig {
                 ProxyType::Https => format!("https://{}:{}", self.proxy_host, self.proxy_port),
                 ProxyType::Socks5 => format!("socks5://{}:{}", self.proxy_host, self.proxy_port),
             };
-            args.push(format!("--all-proxy={}", proxy_url));
+
+            match self.proxy_scope {
+                ProxyScope::All => {
+                    args.push(format!("--all-proxy={}", proxy_url));
+                }
+                ProxyScope::Http => {
+                    args.push(format!("--http-proxy={}", proxy_url));
+                }
+                ProxyScope::Https => {
+                    args.push(format!("--https-proxy={}", proxy_url));
+                }
+                ProxyScope::Ftp => {
+                    args.push(format!("--ftp-proxy={}", proxy_url));
+                }
+            }
 
             if !self.proxy_username.is_empty() {
                 args.push(format!("--all-proxy-user={}", self.proxy_username));

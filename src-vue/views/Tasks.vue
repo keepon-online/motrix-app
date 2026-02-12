@@ -30,6 +30,13 @@ if (showAddDialog) {
 let currentInterval = 1000
 let lastSelectedIndex = -1
 
+// DragSelect state
+const tasksListRef = ref<HTMLElement | null>(null)
+const isDragging = ref(false)
+const dragRect = ref({ x: 0, y: 0, w: 0, h: 0 })
+let dragStart = { x: 0, y: 0 }
+let dragScrollTop = 0
+
 const pageTitle = computed(() => {
   const status = route.params.status as string
   if (status === 'stopped') return t('nav.stopped')
@@ -120,6 +127,63 @@ function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'Delete' && taskStore.selectedGids.length > 0) {
     confirmRemoveSelected()
   }
+}
+
+// DragSelect handlers
+function onDragStart(e: MouseEvent) {
+  // Only start drag on left button, not on interactive elements
+  if (e.button !== 0) return
+  const target = e.target as HTMLElement
+  if (target.closest('button, input, .el-select, .el-checkbox, .el-button')) return
+
+  const list = tasksListRef.value
+  if (!list) return
+
+  const listRect = list.getBoundingClientRect()
+  dragStart = { x: e.clientX - listRect.left, y: e.clientY - listRect.top + list.scrollTop }
+  dragScrollTop = list.scrollTop
+  isDragging.value = false
+
+  const onMove = (me: MouseEvent) => {
+    const dx = me.clientX - (listRect.left + dragStart.x - dragScrollTop + list.scrollTop)
+    const dy = me.clientY - (listRect.top + dragStart.y - dragScrollTop + list.scrollTop)
+    if (!isDragging.value && Math.abs(dx) + Math.abs(dy) > 5) {
+      isDragging.value = true
+      if (!me.shiftKey) taskStore.clearSelection()
+    }
+    if (!isDragging.value) return
+
+    const curX = me.clientX - listRect.left
+    const curY = me.clientY - listRect.top + list.scrollTop
+    const x = Math.min(dragStart.x, curX)
+    const y = Math.min(dragStart.y, curY)
+    const w = Math.abs(curX - dragStart.x)
+    const h = Math.abs(curY - dragStart.y)
+    dragRect.value = { x, y, w, h }
+
+    // Hit-test task items
+    const items = list.querySelectorAll('[data-gid]')
+    items.forEach((item) => {
+      const el = item as HTMLElement
+      const gid = el.dataset.gid!
+      const itemTop = el.offsetTop
+      const itemBottom = itemTop + el.offsetHeight
+      const overlaps = !(itemBottom < y || itemTop > y + h)
+      if (overlaps) {
+        taskStore.selectTask(gid)
+      }
+    })
+  }
+
+  const onUp = () => {
+    isDragging.value = false
+    dragRect.value = { x: 0, y: 0, w: 0, h: 0 }
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup', onUp)
+  }
+
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp)
 }
 
 // Confirm remove single task
@@ -243,13 +307,24 @@ onUnmounted(() => {
 
     <TaskToolbar v-if="taskStore.filteredTasks.length > 0" @remove-selected="confirmRemoveSelected" />
 
-    <div class="tasks-list">
+    <div class="tasks-list" ref="tasksListRef" @mousedown="onDragStart">
+      <div
+        v-if="isDragging"
+        class="drag-select-rect"
+        :style="{
+          left: dragRect.x + 'px',
+          top: dragRect.y + 'px',
+          width: dragRect.w + 'px',
+          height: dragRect.h + 'px',
+        }"
+      />
       <template v-if="taskStore.filteredTasks.length > 0">
         <TaskItem
           v-for="(task, index) in taskStore.filteredTasks"
           :key="task.gid"
           :task="task"
           :selected="taskStore.selectedGids.includes(task.gid)"
+          :data-gid="task.gid"
           @click="(e: MouseEvent) => handleTaskClick(e, task.gid, index)"
           @select="taskStore.toggleSelectTask(task.gid)"
           @pause="taskStore.pauseTask(task.gid)"
@@ -297,5 +372,15 @@ onUnmounted(() => {
 .tasks-list {
   flex: 1;
   overflow-y: auto;
+  position: relative;
+  user-select: none;
+}
+
+.drag-select-rect {
+  position: absolute;
+  border: 1px solid var(--el-color-primary);
+  background: rgba(64, 158, 255, 0.1);
+  pointer-events: none;
+  z-index: 10;
 }
 </style>

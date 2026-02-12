@@ -6,6 +6,8 @@ use crate::error::Error;
 use crate::tray::TrayLabels;
 use crate::Result;
 use serde_json::Value;
+use std::path::PathBuf;
+use tauri::Manager;
 use tauri_plugin_store::StoreExt;
 
 /// Get application configuration
@@ -476,4 +478,161 @@ pub async fn allow_sleep() -> Result<()> {
 pub async fn change_task_position(gid: String, pos: i32, how: String) -> Result<Value> {
     let client = aria2::get_client().await?;
     client.change_position(&gid, pos, &how).await
+}
+
+/// Managed state for log directory path
+pub struct LogDir(pub PathBuf);
+
+/// Managed state for portable mode data directory
+pub struct PortableDataDir(pub Option<PathBuf>);
+
+/// Get log file directory path
+#[tauri::command]
+pub async fn get_log_path(app: tauri::AppHandle) -> Result<String> {
+    let log_dir = app.state::<LogDir>();
+    Ok(log_dir.0.display().to_string())
+}
+
+/// Get application data paths (config, session, DHT, logs)
+#[tauri::command]
+pub async fn get_app_data_paths(app: tauri::AppHandle) -> Result<Value> {
+    let portable = app.state::<PortableDataDir>();
+    let app_data_dir = if let Some(ref dir) = portable.0 {
+        dir.display().to_string()
+    } else {
+        app.path().app_data_dir()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default()
+    };
+    let app_config_dir = app.path().app_config_dir()
+        .map(|p| p.display().to_string())
+        .unwrap_or_default();
+    let log_dir = app.state::<LogDir>();
+
+    Ok(serde_json::json!({
+        "appDataDir": app_data_dir,
+        "appConfigDir": app_config_dir,
+        "logDir": log_dir.0.display().to_string(),
+    }))
+}
+
+/// Clear aria2 session file and restart engine
+#[tauri::command]
+pub async fn clear_session(app: tauri::AppHandle) -> Result<()> {
+    // Find and delete session file (respect portable mode)
+    let portable = app.state::<PortableDataDir>();
+    let app_data_dir = if let Some(ref dir) = portable.0 {
+        dir.clone()
+    } else {
+        app.path().app_data_dir()
+            .map_err(|e| Error::Custom(format!("Failed to get app data dir: {}", e)))?
+    };
+    let session_file = app_data_dir.join("aria2.session");
+    if session_file.exists() {
+        std::fs::remove_file(&session_file)
+            .map_err(|e| Error::Custom(format!("Failed to delete session file: {}", e)))?;
+    }
+
+    // Restart aria2 engine
+    aria2::shutdown_and_cleanup().await;
+    if let Err(e) = aria2::init_engine(&app).await {
+        return Err(Error::Custom(format!("Failed to restart engine: {}", e)));
+    }
+    Ok(())
+}
+
+/// Factory reset - delete all data files
+#[tauri::command]
+pub async fn factory_reset(app: tauri::AppHandle) -> Result<()> {
+    let portable = app.state::<PortableDataDir>();
+    let app_data_dir = if let Some(ref dir) = portable.0 {
+        dir.clone()
+    } else {
+        app.path().app_data_dir()
+            .map_err(|e| Error::Custom(format!("Failed to get app data dir: {}", e)))?
+    };
+
+    // Shutdown engine first
+    aria2::shutdown_and_cleanup().await;
+
+    // Delete known data files
+    let files_to_delete = [
+        "aria2.session",
+        "aria2.conf",
+        "dht.dat",
+        "dht6.dat",
+    ];
+    for file in &files_to_delete {
+        let path = app_data_dir.join(file);
+        if path.exists() {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+
+    // Reset config via store
+    let store = app.store("config.json")?;
+    store.clear();
+    let _ = store.save();
+
+    Ok(())
+}
+
+/// Set window taskbar progress bar
+#[tauri::command]
+pub async fn set_window_progress(app: tauri::AppHandle, progress: f64) -> Result<()> {
+    if let Some(window) = app.get_webview_window("main") {
+        use tauri::window::ProgressBarState;
+        if progress <= 0.0 {
+            let _ = window.set_progress_bar(ProgressBarState {
+                status: Some(tauri::window::ProgressBarStatus::None),
+                progress: None,
+            });
+        } else {
+            let _ = window.set_progress_bar(ProgressBarState {
+                status: Some(tauri::window::ProgressBarStatus::Normal),
+                progress: Some(progress as u64),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Set macOS Dock badge text
+#[tauri::command]
+pub async fn set_dock_badge(_text: String) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use cocoa::appkit::NSApp;
+        use cocoa::base::nil;
+        use cocoa::foundation::NSString;
+        use objc::msg_send;
+        use objc::sel;
+        use objc::sel_impl;
+        use objc::runtime::Object;
+        unsafe {
+            let app: *mut Object = NSApp();
+            let badge = if _text.is_empty() {
+                nil
+            } else {
+                NSString::alloc(nil).init_str(&_text)
+            };
+            let dock_tile: *mut Object = msg_send![app, dockTile];
+            let _: () = msg_send![dock_tile, setBadgeLabel: badge];
+        }
+    }
+    Ok(())
+}
+
+/// Bounce macOS Dock icon
+#[tauri::command]
+pub async fn bounce_dock() -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use cocoa::appkit::{NSApp, NSApplication, NSRequestUserAttentionType};
+        unsafe {
+            let app = NSApp();
+            app.requestUserAttention_(NSRequestUserAttentionType::NSInformationalRequest);
+        }
+    }
+    Ok(())
 }

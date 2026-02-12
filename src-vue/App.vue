@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, provide } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useTheme } from '@/composables/useTheme'
 import { useAria2Events } from '@/composables/useAria2Events'
@@ -9,6 +10,7 @@ import TitleBar from '@/components/TitleBar.vue'
 import Sidebar from '@/components/Sidebar.vue'
 import DragDrop from '@/components/DragDrop.vue'
 
+const router = useRouter()
 const appStore = useAppStore()
 const { initTheme } = useTheme()
 
@@ -55,6 +57,15 @@ onMounted(async () => {
   listen<string[]>('open-urls', (event) => {
     handleIncomingUrls(event.payload)
   }).catch((e) => console.warn('Failed to listen open-urls:', e))
+
+  // Listen for menu events
+  listen('menu-add-task', () => {
+    showAddDialog.value = true
+  }).catch((e) => console.warn('Failed to listen menu-add-task:', e))
+
+  listen('menu-preferences', () => {
+    router.push('/settings')
+  }).catch((e) => console.warn('Failed to listen menu-preferences:', e))
 
   // Listen for deep link URLs (non-blocking, dynamic import)
   import('@tauri-apps/plugin-deep-link')

@@ -107,3 +107,90 @@ export function decodeThunderUrl(url: string): string {
     return url
   }
 }
+
+/**
+ * Parse a cURL command string into URL and options
+ */
+export function parseCurlCommand(input: string): { url: string; headers: Record<string, string>; output?: string; proxy?: string } | null {
+  const trimmed = input.trim()
+  if (!trimmed.toLowerCase().startsWith('curl ')) return null
+
+  const result: { url: string; headers: Record<string, string>; output?: string; proxy?: string } = {
+    url: '',
+    headers: {},
+  }
+
+  // Tokenize respecting quotes
+  const tokens: string[] = []
+  let current = ''
+  let inSingle = false
+  let inDouble = false
+  let escaped = false
+
+  for (const ch of trimmed) {
+    if (escaped) {
+      current += ch
+      escaped = false
+      continue
+    }
+    if (ch === '\\') {
+      escaped = true
+      continue
+    }
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle
+      continue
+    }
+    if (ch === '"' && !inSingle) {
+      inDouble = !inDouble
+      continue
+    }
+    if ((ch === ' ' || ch === '\t') && !inSingle && !inDouble) {
+      if (current) {
+        tokens.push(current)
+        current = ''
+      }
+      continue
+    }
+    current += ch
+  }
+  if (current) tokens.push(current)
+
+  // Parse tokens (skip "curl")
+  let i = 1
+  while (i < tokens.length) {
+    const token = tokens[i]
+    if (token === '-H' || token === '--header') {
+      i++
+      if (i < tokens.length) {
+        const header = tokens[i]
+        const colonIdx = header.indexOf(':')
+        if (colonIdx > 0) {
+          const key = header.slice(0, colonIdx).trim()
+          const value = header.slice(colonIdx + 1).trim()
+          result.headers[key] = value
+        }
+      }
+    } else if (token === '-o' || token === '--output') {
+      i++
+      if (i < tokens.length) result.output = tokens[i]
+    } else if (token === '-x' || token === '--proxy') {
+      i++
+      if (i < tokens.length) result.proxy = tokens[i]
+    } else if (token === '-A' || token === '--user-agent') {
+      i++
+      if (i < tokens.length) result.headers['User-Agent'] = tokens[i]
+    } else if (token === '-e' || token === '--referer') {
+      i++
+      if (i < tokens.length) result.headers['Referer'] = tokens[i]
+    } else if (token === '-b' || token === '--cookie') {
+      i++
+      if (i < tokens.length) result.headers['Cookie'] = tokens[i]
+    } else if (!token.startsWith('-') && !result.url) {
+      result.url = token
+    }
+    i++
+  }
+
+  return result.url ? result : null
+}

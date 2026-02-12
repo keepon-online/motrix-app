@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
 import { useAppStore } from '@/stores/app'
 import { formatSpeed } from '@/utils'
 import { invoke } from '@tauri-apps/api/core'
+import Speedometer from './Speedometer.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -52,8 +53,32 @@ const isActive = (path: string) => {
   return route.path === path
 }
 
-const downloadSpeedText = computed(() => formatSpeed(taskStore.globalStat?.downloadSpeed ?? '0'))
-const uploadSpeedText = computed(() => formatSpeed(taskStore.globalStat?.uploadSpeed ?? '0'))
+// Update dock badge with download speed
+watch(() => taskStore.globalStat?.downloadSpeed, (speed) => {
+  const s = parseInt(speed ?? '0')
+  if (s > 0) {
+    invoke('set_dock_badge', { text: formatSpeed(speed ?? '0') }).catch(() => {})
+  } else {
+    invoke('set_dock_badge', { text: '' }).catch(() => {})
+  }
+})
+
+// Update window progress bar
+watch(() => taskStore.globalStat, (stat) => {
+  const active = parseInt(stat?.numActive ?? '0')
+  if (active > 0) {
+    // Calculate overall progress from active tasks
+    const tasks = taskStore.tasks.filter(t => t.status === 'active')
+    if (tasks.length > 0) {
+      const totalSize = tasks.reduce((sum, t) => sum + parseInt(t.totalLength || '0'), 0)
+      const completedSize = tasks.reduce((sum, t) => sum + parseInt(t.completedLength || '0'), 0)
+      const progress = totalSize > 0 ? Math.round((completedSize / totalSize) * 100) : 0
+      invoke('set_window_progress', { progress }).catch(() => {})
+    }
+  } else {
+    invoke('set_window_progress', { progress: 0 }).catch(() => {})
+  }
+}, { deep: true })
 </script>
 
 <template>
@@ -84,14 +109,10 @@ const uploadSpeedText = computed(() => formatSpeed(taskStore.globalStat?.uploadS
       >
         <template #reference>
           <div class="speed-info" :class="{ limited: isLimited }" @click="showSpeedMenu = !showSpeedMenu">
-            <div class="speed-item">
-              <el-icon><Download /></el-icon>
-              <span>{{ downloadSpeedText }}</span>
-            </div>
-            <div class="speed-item">
-              <el-icon><Upload /></el-icon>
-              <span>{{ uploadSpeedText }}</span>
-            </div>
+            <Speedometer
+              :download-speed="taskStore.globalStat?.downloadSpeed ?? '0'"
+              :upload-speed="taskStore.globalStat?.uploadSpeed ?? '0'"
+            />
             <div v-if="isLimited" class="speed-limit-tag">
               {{ t('task.speedLimited') }}
             </div>

@@ -14,6 +14,7 @@ export interface Task {
   bittorrent?: BittorrentInfo
   errorCode?: string
   errorMessage?: string
+  bitfield?: string
 }
 
 export type TaskStatus = 'active' | 'waiting' | 'paused' | 'error' | 'complete' | 'removed'
@@ -52,6 +53,12 @@ export interface GlobalStat {
   numStoppedTotal: string
 }
 
+// Run mode types
+export type RunMode = 'standard' | 'tray' | 'hide_tray'
+
+// Proxy scope types
+export type ProxyScope = 'all' | 'http' | 'https' | 'ftp'
+
 // Configuration types
 export interface AppConfig {
   locale: string
@@ -63,6 +70,7 @@ export interface AppConfig {
   notifyOnComplete: boolean
   autoClearCompleted: boolean
   resumeAllWhenAppLaunched: boolean
+  runMode: RunMode
   maxConcurrentDownloads: number
   maxConnectionPerServer: number
   split: number
@@ -82,6 +90,7 @@ export interface AppConfig {
   userAgent: string
   proxyEnabled: boolean
   proxyType: 'http' | 'https' | 'socks5'
+  proxyScope: ProxyScope
   proxyHost: string
   proxyPort: number
   proxyUsername: string
@@ -100,6 +109,13 @@ export interface AppConfig {
   btLoadSavedMetadata: boolean
   btRemoveUnselectedFile: boolean
   btDetachSeedOnly: boolean
+}
+
+// App data paths
+export interface AppDataPaths {
+  appDataDir: string
+  appConfigDir: string
+  logDir: string
 }
 
 // Add task options

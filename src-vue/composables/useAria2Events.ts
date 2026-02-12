@@ -84,6 +84,8 @@ export function useAria2Events() {
           }, 3000)
         }
         checkAndAllowSleep()
+        // Bounce dock on macOS
+        invoke('bounce_dock').catch(() => {})
         break
 
       case 'download_error':
