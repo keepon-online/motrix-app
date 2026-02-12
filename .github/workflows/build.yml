@@ -98,12 +98,16 @@ jobs:
           args: --target ${{ matrix.target }}
 
   build-macos:
-    runs-on: macos-latest
     strategy:
       matrix:
         include:
           - arch: aarch64
             target: aarch64-apple-darwin
+            runner: macos-latest
+          - arch: x86_64
+            target: x86_64-apple-darwin
+            runner: macos-13
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Checkout
