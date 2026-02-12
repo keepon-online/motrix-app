@@ -169,6 +169,14 @@ fn main() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                // Ensure aria2c is cleaned up on any exit path
+                tauri::async_runtime::block_on(async {
+                    aria2::shutdown_and_cleanup().await;
+                });
+            }
+        });
 }
