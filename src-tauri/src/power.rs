@@ -36,6 +36,7 @@ mod platform {
 
     static ASSERTION_ID: Mutex<u32> = Mutex::new(0);
 
+    #[link(name = "IOKit", kind = "framework")]
     extern "C" {
         fn IOPMAssertionCreateWithName(
             assertion_type: *const std::ffi::c_void,
