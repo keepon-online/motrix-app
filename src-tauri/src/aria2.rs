@@ -62,21 +62,109 @@ static ARIA2_CLIENT: RwLock<Option<Arc<Aria2Client>>> = RwLock::const_new(None);
 /// Global aria2 child process handle (must be kept alive to prevent process from being killed)
 static ARIA2_PROCESS: Mutex<Option<tauri_plugin_shell::process::CommandChild>> = Mutex::const_new(None);
 
+/// Kill any orphaned aria2c processes listening on the given port
+fn kill_orphaned_aria2c(port: u16) {
+    #[cfg(target_os = "windows")]
+    {
+        // Find PIDs listening on the port and kill them
+        let output = std::process::Command::new("cmd")
+            .args(["/C", &format!("netstat -ano | findstr \"LISTENING\" | findstr \":{port}\"")])
+            .output();
+        if let Ok(output) = output {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                if let Some(pid_str) = line.split_whitespace().last() {
+                    if let Ok(pid) = pid_str.parse::<u32>() {
+                        if pid > 0 {
+                            tracing::info!("Killing orphaned process on port {} (PID: {})", port, pid);
+                            let _ = std::process::Command::new("taskkill")
+                                .args(["/F", "/PID", &pid.to_string()])
+                                .output();
+                        }
+                    }
+                }
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Use lsof to find process on the port
+        let output = std::process::Command::new("lsof")
+            .args(["-ti", &format!(":{port}")])
+            .output();
+        if let Ok(output) = output {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for pid_str in stdout.split_whitespace() {
+                if let Ok(pid) = pid_str.parse::<u32>() {
+                    if pid > 0 {
+                        tracing::info!("Killing orphaned process on port {} (PID: {})", port, pid);
+                        let _ = std::process::Command::new("kill")
+                            .args(["-9", &pid.to_string()])
+                            .output();
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Force kill the managed aria2c child process
+pub async fn force_kill_process() {
+    let mut guard = ARIA2_PROCESS.lock().await;
+    if let Some(child) = guard.take() {
+        tracing::info!("Force killing aria2c child process");
+        let _ = child.kill();
+    }
+}
+
+/// Graceful shutdown: try RPC shutdown first, then force kill as fallback
+pub async fn shutdown_and_cleanup() {
+    // Try graceful RPC shutdown
+    let rpc_ok = if let Ok(client) = get_client().await {
+        let _ = client.save_session().await;
+        client.shutdown().await.is_ok()
+    } else {
+        false
+    };
+
+    if !rpc_ok {
+        tracing::warn!("RPC shutdown failed, force killing aria2c process");
+        force_kill_process().await;
+    }
+
+    // Clear the global client
+    let mut guard = ARIA2_CLIENT.write().await;
+    *guard = None;
+}
+
 /// Initialize aria2 engine
 pub async fn init_engine(app: &AppHandle) -> Result<()> {
     use tauri_plugin_store::StoreExt;
     use crate::config::AppConfig;
 
-    // Load full config from store
+    // Load full config from store, persist defaults on first launch to ensure
+    // rpc_secret consistency (AppConfig::default() generates a random UUID each time)
     let store = app.store("config.json")?;
     let config: AppConfig = if let Some(config_val) = store.get("config") {
-        serde_json::from_value(config_val.clone()).unwrap_or_default()
+        serde_json::from_value(config_val.clone()).unwrap_or_else(|e| {
+            tracing::warn!("Failed to deserialize config, regenerating defaults: {}", e);
+            let default_config = AppConfig::default();
+            store.set("config", serde_json::to_value(&default_config).unwrap());
+            let _ = store.save();
+            default_config
+        })
     } else {
-        AppConfig::default()
+        let default_config = AppConfig::default();
+        store.set("config", serde_json::to_value(&default_config).unwrap());
+        let _ = store.save();
+        default_config
     };
 
     let port = config.rpc_port;
     let secret = config.rpc_secret.clone();
+
+    // Kill any orphaned aria2c from previous session that wasn't cleaned up
+    kill_orphaned_aria2c(port);
 
     // Start aria2 process using config
     start_aria2_process(app, &config).await?;

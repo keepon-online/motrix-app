@@ -67,13 +67,9 @@ pub fn create_tray<R: Runtime>(app: &tauri::App<R>) -> Result<(), tauri::Error> 
             }
             "quit" => {
                 tracing::info!("Quitting application");
-                // Save session and shutdown aria2 before quitting
                 let app_handle = app.clone();
                 tauri::async_runtime::spawn(async move {
-                    if let Ok(client) = aria2::get_client().await {
-                        let _ = client.save_session().await;
-                        let _ = client.shutdown().await;
-                    }
+                    aria2::shutdown_and_cleanup().await;
                     app_handle.exit(0);
                 });
             }

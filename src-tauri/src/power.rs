@@ -32,6 +32,7 @@ pub fn allow_sleep() -> Result<(), String> {
 #[cfg(target_os = "macos")]
 mod platform {
     use std::sync::Mutex;
+    use core_foundation::base::TCFType;
 
     static ASSERTION_ID: Mutex<u32> = Mutex::new(0);
 
