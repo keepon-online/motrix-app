@@ -323,27 +323,39 @@ async function copyLink() {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 14px 16px;
   background: var(--el-bg-color);
-  border-radius: 8px;
-  margin-bottom: 8px;
+  border: 1px solid var(--motrix-card-border);
+  border-radius: 10px;
+  margin-bottom: 10px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
 
   &:hover {
-    background: var(--el-fill-color-light);
+    border-color: var(--motrix-card-hover-border);
+    box-shadow: var(--motrix-card-hover-shadow);
   }
 
   &.selected {
-    background: var(--el-color-primary-light-9);
+    border-color: var(--motrix-primary);
+    background: var(--motrix-primary-bg);
   }
 
-  &.status-error {
-    border-left: 3px solid var(--el-color-danger);
+  &.status-active {
+    border-left: 3px solid var(--motrix-dl-color);
   }
 
   &.status-complete {
     border-left: 3px solid var(--el-color-success);
+  }
+
+  &.status-error {
+    border-left: 3px solid var(--motrix-error-color);
+  }
+
+  &.status-paused,
+  &.status-waiting {
+    border-left: 3px solid var(--motrix-pause-color);
   }
 }
 
@@ -363,7 +375,7 @@ async function copyLink() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .task-meta {
@@ -374,18 +386,30 @@ async function copyLink() {
   color: var(--el-text-color-secondary);
   margin-bottom: 8px;
 
-  .task-speed,
+  .task-speed {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
   .task-eta {
     display: flex;
     align-items: center;
     gap: 4px;
+    color: var(--el-text-color-secondary);
   }
 }
 
 .task-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+
+  .task-item:hover & {
+    opacity: 1;
+  }
 }
 </style>
 

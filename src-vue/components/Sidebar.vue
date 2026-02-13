@@ -6,7 +6,6 @@ import { useTaskStore } from '@/stores/task'
 import { useAppStore } from '@/stores/app'
 import { formatSpeed } from '@/utils'
 import { invoke } from '@tauri-apps/api/core'
-import Speedometer from './Speedometer.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -64,9 +63,10 @@ const menuItems = computed(() => [
   { path: '/tasks/stopped', icon: 'Finished', label: t('nav.stopped'), badge: numStopped.value },
 ])
 
-const isActive = (path: string) => {
-  return route.path === path
-}
+const isActive = (path: string) => route.path === path
+
+const dlSpeedText = computed(() => formatSpeed(taskStore.globalStat?.downloadSpeed ?? '0'))
+const ulSpeedText = computed(() => formatSpeed(taskStore.globalStat?.uploadSpeed ?? '0'))
 
 // Update dock badge with download speed
 watch(() => taskStore.globalStat?.downloadSpeed, (speed) => {
@@ -82,7 +82,6 @@ watch(() => taskStore.globalStat?.downloadSpeed, (speed) => {
 watch(() => taskStore.globalStat, (stat) => {
   const active = parseInt(stat?.numActive ?? '0')
   if (active > 0) {
-    // Calculate overall progress from active tasks
     const tasks = taskStore.tasks.filter(t => t.status === 'active')
     if (tasks.length > 0) {
       const totalSize = tasks.reduce((sum, t) => sum + parseInt(t.totalLength || '0'), 0)
@@ -106,40 +105,49 @@ watch(() => taskStore.globalStat, (stat) => {
 </script>
 
 <template>
-  <aside class="sidebar">
-    <nav class="sidebar-nav">
-      <router-link
+  <aside class="icon-rail">
+    <!-- Logo -->
+    <div class="rail-logo">
+      <img src="@/assets/logo.svg" alt="M" />
+    </div>
+
+    <!-- Navigation -->
+    <nav class="rail-nav">
+      <el-tooltip
         v-for="item in menuItems"
         :key="item.path"
-        :to="item.path"
-        class="nav-item"
-        :class="{ active: isActive(item.path) }"
+        :content="item.label"
+        placement="right"
+        :show-after="400"
       >
-        <el-icon :size="20">
-          <component :is="item.icon" />
-        </el-icon>
-        <span class="nav-label">{{ item.label }}</span>
-        <span v-if="item.badge > 0" class="nav-badge">{{ item.badge > 99 ? '99+' : item.badge }}</span>
-      </router-link>
+        <router-link
+          :to="item.path"
+          class="rail-item"
+          :class="{ active: isActive(item.path) }"
+        >
+          <el-icon :size="22">
+            <component :is="item.icon" />
+          </el-icon>
+          <span v-if="item.badge > 0" class="rail-badge">{{ item.badge > 99 ? '99+' : item.badge }}</span>
+        </router-link>
+      </el-tooltip>
     </nav>
 
-    <div class="sidebar-footer">
+    <!-- Footer -->
+    <div class="rail-footer">
+      <!-- Speed display -->
       <el-popover
         :visible="showSpeedMenu"
-        placement="top"
-        :width="160"
+        placement="right"
+        :width="150"
         trigger="click"
         @update:visible="(v: boolean) => showSpeedMenu = v"
       >
         <template #reference>
-          <div class="speed-info" :class="{ limited: isLimited }" @click="showSpeedMenu = !showSpeedMenu">
-            <Speedometer
-              :download-speed="taskStore.globalStat?.downloadSpeed ?? '0'"
-              :upload-speed="taskStore.globalStat?.uploadSpeed ?? '0'"
-            />
-            <div v-if="isLimited" class="speed-limit-tag">
-              {{ t('task.speedLimited') }}
-            </div>
+          <div class="rail-speed" :class="{ limited: isLimited }" @click="showSpeedMenu = !showSpeedMenu">
+            <span class="speed-dl">↓ {{ dlSpeedText }}</span>
+            <span class="speed-ul">↑ {{ ulSpeedText }}</span>
+            <span v-if="isLimited" class="speed-limited-dot" />
           </div>
         </template>
         <div class="speed-menu">
@@ -155,54 +163,80 @@ watch(() => taskStore.globalStat, (stat) => {
         </div>
       </el-popover>
 
-      <div class="sidebar-actions">
-        <div class="engine-status" :class="{ connected: appStore.engineReady, disconnected: !appStore.engineReady }">
-          <span class="status-dot" />
-          <span class="status-text">{{ appStore.engineReady ? t('engine.connected') : t('engine.disconnected') }}</span>
-          <el-button
-            v-if="!appStore.engineReady"
-            size="small"
-            :loading="reconnecting"
-            @click="handleReconnect"
-          >
-            {{ t('engine.reconnect') }}
-          </el-button>
+      <!-- Engine status -->
+      <el-tooltip
+        :content="appStore.engineReady ? t('engine.connected') : t('engine.disconnected')"
+        placement="right"
+      >
+        <div
+          class="rail-engine"
+          :class="{ connected: appStore.engineReady, disconnected: !appStore.engineReady }"
+          @click="!appStore.engineReady && handleReconnect()"
+        >
+          <span class="engine-dot" />
+          <el-icon v-if="!appStore.engineReady && !reconnecting" :size="12"><RefreshRight /></el-icon>
+          <el-icon v-if="reconnecting" :size="12" class="is-loading"><Loading /></el-icon>
         </div>
-        <router-link to="/settings" class="action-btn" :class="{ active: route.path === '/settings' }">
+      </el-tooltip>
+
+      <!-- Settings & About -->
+      <el-tooltip :content="t('nav.settings')" placement="right" :show-after="400">
+        <router-link to="/settings" class="rail-item" :class="{ active: route.path === '/settings' }">
           <el-icon :size="20"><Setting /></el-icon>
         </router-link>
-        <router-link to="/about" class="action-btn" :class="{ active: route.path === '/about' }">
+      </el-tooltip>
+      <el-tooltip :content="t('nav.about')" placement="right" :show-after="400">
+        <router-link to="/about" class="rail-item" :class="{ active: route.path === '/about' }">
           <el-icon :size="20"><InfoFilled /></el-icon>
         </router-link>
-      </div>
+      </el-tooltip>
     </div>
   </aside>
 </template>
 
 <style lang="scss" scoped>
-.sidebar {
+.icon-rail {
   display: flex;
   flex-direction: column;
-  width: 180px;
-  background: var(--el-bg-color-page);
+  align-items: center;
+  width: 56px;
+  background: var(--motrix-rail-bg);
   border-right: 1px solid var(--el-border-color-lighter);
+  padding: 8px 0;
+  flex-shrink: 0;
 }
 
-.sidebar-nav {
+.rail-logo {
+  width: 28px;
+  height: 28px;
+  margin: 4px 0 16px;
+  opacity: 0.7;
+
+  img {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+.rail-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
   flex: 1;
-  padding: 16px 8px;
 }
 
-.nav-item {
+.rail-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  margin-bottom: 4px;
-  border-radius: 8px;
-  color: var(--el-text-color-regular);
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  color: var(--motrix-rail-text);
   text-decoration: none;
   transition: all 0.2s;
+  position: relative;
 
   &:hover {
     background: var(--el-fill-color-light);
@@ -210,132 +244,113 @@ watch(() => taskStore.globalStat, (stat) => {
   }
 
   &.active {
-    background: var(--el-color-primary-light-9);
-    color: var(--el-color-primary);
-  }
-
-  .nav-label {
-    font-size: 14px;
-    flex: 1;
-  }
-
-  .nav-badge {
-    font-size: 11px;
-    min-width: 18px;
-    height: 18px;
-    line-height: 18px;
-    text-align: center;
-    border-radius: 9px;
-    padding: 0 5px;
-    background: var(--el-color-primary);
-    color: #fff;
-    flex-shrink: 0;
-  }
-
-  &.active .nav-badge {
-    background: var(--el-color-primary);
+    background: var(--motrix-rail-active-bg);
+    color: var(--motrix-primary);
   }
 }
 
-.sidebar-footer {
-  padding: 16px;
+.rail-badge {
+  position: absolute;
+  top: 2px;
+  right: 0px;
+  min-width: 16px;
+  height: 16px;
+  line-height: 16px;
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+  border-radius: 8px;
+  padding: 0 4px;
+  background: var(--motrix-primary);
+  color: #fff;
+}
+
+.rail-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding-top: 8px;
   border-top: 1px solid var(--el-border-color-lighter);
+  margin-top: 8px;
 }
 
-.speed-info {
-  margin-bottom: 16px;
+.rail-speed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-size: 9px;
+  font-weight: 500;
   cursor: pointer;
-  padding: 8px;
-  border-radius: 6px;
-  transition: all 0.2s;
+  padding: 6px 4px;
+  border-radius: 8px;
+  transition: background 0.2s;
+  position: relative;
+  width: 48px;
+  text-align: center;
 
   &:hover {
     background: var(--el-fill-color-light);
   }
 
   &.limited {
-    border: 1px solid var(--el-color-warning-light-5);
-    background: var(--el-color-warning-light-9);
+    background: rgba(230, 162, 60, 0.08);
   }
 
-  .speed-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    color: var(--el-text-color-secondary);
-    margin-bottom: 4px;
+  .speed-dl {
+    color: var(--motrix-dl-color);
+    white-space: nowrap;
   }
 
-  .speed-limit-tag {
-    font-size: 11px;
-    color: var(--el-color-warning);
-    margin-top: 4px;
-    text-align: center;
+  .speed-ul {
+    color: var(--motrix-ul-color);
+    white-space: nowrap;
+  }
+
+  .speed-limited-dot {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--motrix-pause-color);
   }
 }
 
-.sidebar-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.engine-status {
+.rail-engine {
   display: flex;
   align-items: center;
-  gap: 6px;
-  width: 100%;
-  margin-bottom: 8px;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
+  justify-content: center;
+  gap: 3px;
+  width: 40px;
+  height: 24px;
+  border-radius: 12px;
+  cursor: default;
+  transition: all 0.2s;
 
-  .status-dot {
-    width: 8px;
-    height: 8px;
+  .engine-dot {
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     flex-shrink: 0;
   }
 
-  .status-text {
-    flex: 1;
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  &.connected .status-dot {
+  &.connected .engine-dot {
     background: var(--el-color-success);
   }
 
-  &.disconnected .status-dot {
-    background: var(--el-color-danger);
-  }
+  &.disconnected {
+    cursor: pointer;
 
-  &.disconnected .status-text {
-    color: var(--el-color-danger);
-  }
-}
+    .engine-dot {
+      background: var(--motrix-error-color);
+    }
 
-.action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  color: var(--el-text-color-regular);
-  transition: all 0.2s;
-
-  &:hover {
-    background: var(--el-fill-color-light);
-    color: var(--el-text-color-primary);
-  }
-
-  &.active {
-    background: var(--el-color-primary-light-9);
-    color: var(--el-color-primary);
+    &:hover {
+      background: var(--el-fill-color-light);
+    }
   }
 }
 </style>
@@ -352,7 +367,7 @@ watch(() => taskStore.globalStat, (stat) => {
   background: var(--el-fill-color-light);
 }
 .speed-menu .speed-menu-item.active {
-  color: var(--el-color-primary);
+  color: var(--motrix-primary);
   font-weight: 600;
 }
 </style>

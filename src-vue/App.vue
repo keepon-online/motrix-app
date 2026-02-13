@@ -139,7 +139,7 @@ onMounted(async () => {
 .app-content {
   flex: 1;
   overflow: auto;
-  padding: 16px;
+  padding: 20px 24px;
 }
 
 .fade-enter-active,

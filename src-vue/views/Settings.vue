@@ -15,6 +15,7 @@ const { setTheme } = useTheme()
 const trackerInput = ref('')
 const trackerUpdating = ref(false)
 const showRpcSecret = ref(false)
+const activeTab = ref('basic')
 const appDataPaths = ref<AppDataPaths | null>(null)
 const logPath = ref('')
 
@@ -23,6 +24,15 @@ const rpcAddress = computed(() => {
   const port = appStore.config?.rpcPort ?? 16800
   return `ws://${host}:${port}/jsonrpc`
 })
+
+const settingsTabs = computed(() => [
+  { name: 'basic', label: t('settings.basic'), icon: 'Setting' },
+  { name: 'download', label: t('settings.download'), icon: 'Download' },
+  { name: 'bt', label: t('settings.bt'), icon: 'Connection' },
+  { name: 'proxy', label: t('settings.proxy'), icon: 'Position' },
+  { name: 'advanced', label: t('settings.advanced'), icon: 'Tools' },
+  { name: 'developer', label: t('settings.developerTools'), icon: 'Monitor' },
+])
 
 // Load paths on mount
 invoke<string>('get_log_path').then(p => logPath.value = p).catch(() => {})
@@ -123,7 +133,6 @@ async function updateTrackers() {
 
   trackerUpdating.value = true
   ElMessage.info(t('settings.trackerUpdating'))
-
   try {
     const trackers = await invoke<string[]>('fetch_tracker_list', { sources })
     const btTracker = trackers.join(',')
@@ -172,7 +181,6 @@ async function resetDefaults() {
     // User cancelled
   }
 }
-
 async function exportConfig() {
   try {
     const { save } = await import('@tauri-apps/plugin-dialog')
@@ -229,7 +237,6 @@ async function copyRpcSecret() {
     ElMessage.error('Failed to copy')
   }
 }
-
 async function copyRpcAddress() {
   try {
     const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
@@ -281,7 +288,6 @@ async function openAppDataDir() {
     }
   }
 }
-
 async function clearSession() {
   try {
     await ElMessageBox.confirm(
@@ -316,605 +322,612 @@ async function factoryReset() {
 
 <template>
   <div class="settings-view">
-    <div class="settings-header">
-      <h2 class="settings-title">{{ t('settings.title') }}</h2>
-      <el-button size="small" @click="exportConfig">
-        {{ t('settings.export') }}
-      </el-button>
-      <el-button size="small" @click="importConfig">
-        {{ t('settings.import') }}
-      </el-button>
-      <el-button size="small" @click="resetDefaults">
-        <el-icon><RefreshRight /></el-icon>
-        {{ t('settings.resetDefaults') }}
-      </el-button>
-    </div>
+    <div class="settings-layout">
+      <nav class="settings-tabs">
+        <div class="settings-tabs-header">
+          <h2 class="settings-title">{{ t('settings.title') }}</h2>
+        </div>
+        <div v-for="tab in settingsTabs" :key="tab.name" class="settings-tab" :class="{ active: activeTab === tab.name }" @click="activeTab = tab.name">
+          <el-icon :size="16"><component :is="tab.icon" /></el-icon>
+          <span>{{ tab.label }}</span>
+        </div>
+        <div class="settings-tabs-footer">
+          <div class="settings-actions-row">
+            <el-button size="small" @click="exportConfig">
+              <el-icon><Upload /></el-icon>
+              {{ t('settings.export') }}
+            </el-button>
+            <el-button size="small" @click="importConfig">
+              <el-icon><Download /></el-icon>
+              {{ t('settings.import') }}
+            </el-button>
+          </div>
+          <el-button size="small" class="reset-btn" @click="resetDefaults">
+            <el-icon><RefreshRight /></el-icon>
+            {{ t('settings.resetDefaults') }}
+          </el-button>
+        </div>
+      </nav>
+      <div class="settings-content">
+        <el-form label-width="180px" label-position="left">
 
-    <div class="settings-scroll">
-      <el-form label-width="180px" label-position="left">
-        <!-- Basic Settings -->
-        <h3 class="settings-section">{{ t('settings.basic') }}</h3>
+          <!-- Basic Settings Tab -->
+          <template v-if="activeTab === 'basic'">
+            <el-form-item :label="t('settings.theme')">
+              <el-radio-group :model-value="appStore.config?.theme" @change="(val: string | number | boolean | undefined) => val && setTheme(val as 'auto' | 'light' | 'dark')">
+                <el-radio-button value="auto">{{ t('settings.themeAuto') }}</el-radio-button>
+                <el-radio-button value="light">{{ t('settings.themeLight') }}</el-radio-button>
+                <el-radio-button value="dark">{{ t('settings.themeDark') }}</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
 
-        <el-form-item :label="t('settings.theme')">
-          <el-radio-group :model-value="appStore.config?.theme" @change="(val: string | number | boolean | undefined) => val && setTheme(val as 'auto' | 'light' | 'dark')">
-            <el-radio-button value="auto">{{ t('settings.themeAuto') }}</el-radio-button>
-            <el-radio-button value="light">{{ t('settings.themeLight') }}</el-radio-button>
-            <el-radio-button value="dark">{{ t('settings.themeDark') }}</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
+            <el-form-item :label="t('settings.language')">
+              <el-select :model-value="appStore.config?.locale" @change="appStore.setLocale">
+                <el-option label="English" value="en" />
+                <el-option label="简体中文" value="zh-CN" />
+              </el-select>
+            </el-form-item>
 
-        <el-form-item :label="t('settings.language')">
-          <el-select :model-value="appStore.config?.locale" @change="appStore.setLocale">
-            <el-option label="English" value="en" />
-            <el-option label="简体中文" value="zh-CN" />
-          </el-select>
-        </el-form-item>
-
-        <el-form-item :label="t('settings.downloadDir')">
-          <el-input :model-value="appStore.config?.downloadDir" readonly>
-            <template #append>
-              <el-button @click="selectDownloadDir">
-                <el-icon><FolderOpened /></el-icon>
-              </el-button>
-            </template>
-          </el-input>
-        </el-form-item>
-
-        <!-- Download Settings -->
-        <h3 class="settings-section">{{ t('settings.download') }}</h3>
-
-        <el-form-item :label="t('settings.maxConcurrent')">
-          <el-input-number
-            :model-value="appStore.config?.maxConcurrentDownloads"
-            :min="1"
-            :max="20"
-            @change="(val: number | undefined) => val != null && appStore.saveConfig({ maxConcurrentDownloads: val })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.maxConnections')">
-          <el-input-number
-            :model-value="appStore.config?.maxConnectionPerServer"
-            :min="1"
-            :max="64"
-            @change="(val: number | undefined) => val != null && appStore.saveConfig({ maxConnectionPerServer: val })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.split')">
-          <el-input-number
-            :model-value="appStore.config?.split"
-            :min="1"
-            :max="64"
-            @change="(val: number | undefined) => val != null && appStore.saveConfig({ split: val })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.minSplitSize')">
-          <el-select
-            :model-value="appStore.config?.minSplitSize"
-            @change="(val: string) => appStore.saveConfig({ minSplitSize: val })"
-          >
-            <el-option
-              v-for="opt in minSplitSizeOptions"
-              :key="opt.value"
-              :label="opt.label"
-              :value="opt.value"
-            />
-          </el-select>
-          <div class="form-tip">{{ t('settings.minSplitSizeTip') }}</div>
-        </el-form-item>
-
-        <el-form-item :label="t('settings.maxDownloadSpeed')">
-          <el-select
-            :model-value="appStore.config?.maxDownloadLimit"
-            @change="(val: string) => appStore.saveConfig({ maxDownloadLimit: val })"
-          >
-            <el-option
-              v-for="opt in speedOptions"
-              :key="opt.value"
-              :label="opt.label"
-              :value="opt.value"
-            />
-          </el-select>
-        </el-form-item>
-
-        <el-form-item :label="t('settings.maxUploadSpeed')">
-          <el-select
-            :model-value="appStore.config?.maxUploadLimit"
-            @change="(val: string) => appStore.saveConfig({ maxUploadLimit: val })"
-          >
-            <el-option
-              v-for="opt in speedOptions"
-              :key="opt.value"
-              :label="opt.label"
-              :value="opt.value"
-            />
-          </el-select>
-        </el-form-item>
-
-        <el-form-item :label="t('settings.maxOverallDownloadLimit')">
-          <el-select
-            :model-value="appStore.config?.maxOverallDownloadLimit"
-            @change="(val: string) => appStore.saveConfig({ maxOverallDownloadLimit: val })"
-          >
-            <el-option
-              v-for="opt in speedOptions"
-              :key="opt.value"
-              :label="opt.label"
-              :value="opt.value"
-            />
-          </el-select>
-        </el-form-item>
-
-        <el-form-item :label="t('settings.maxOverallUploadLimit')">
-          <el-select
-            :model-value="appStore.config?.maxOverallUploadLimit"
-            @change="(val: string) => appStore.saveConfig({ maxOverallUploadLimit: val })"
-          >
-            <el-option
-              v-for="opt in speedOptions"
-              :key="opt.value"
-              :label="opt.label"
-              :value="opt.value"
-            />
-          </el-select>
-        </el-form-item>
-
-        <!-- BT Settings -->
-        <h3 class="settings-section">{{ t('settings.bt') }}</h3>
-
-        <el-form-item :label="t('settings.btPort')">
-          <el-input-number
-            :model-value="appStore.config?.btListenPort"
-            :min="1024"
-            :max="65535"
-            @change="(val: number | undefined) => val != null && appStore.saveConfig({ btListenPort: val })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.dhtPort')">
-          <el-input-number
-            :model-value="appStore.config?.dhtListenPort"
-            :min="1024"
-            :max="65535"
-            @change="(val: number | undefined) => val != null && appStore.saveConfig({ dhtListenPort: val })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.upnp')">
-          <el-switch
-            :model-value="appStore.config?.enableUpnp"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ enableUpnp: Boolean(val) })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.seedRatio')">
-          <el-input-number
-            :model-value="appStore.config?.seedRatio"
-            :min="0"
-            :max="10"
-            :step="0.1"
-            :precision="1"
-            @change="(val: number | undefined) => val != null && appStore.saveConfig({ seedRatio: val })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.seedTime')">
-          <el-input-number
-            :model-value="appStore.config?.seedTime"
-            :min="0"
-            :max="99999"
-            @change="(val: number | undefined) => val != null && appStore.saveConfig({ seedTime: val })"
-          />
-          <span class="input-suffix">{{ t('settings.seedTimeUnit') }}</span>
-          <div class="form-tip">{{ t('settings.seedTimeTip') }}</div>
-        </el-form-item>
-
-        <el-form-item :label="t('settings.trackers')">
-          <div class="tracker-sources">
-            <div class="tracker-status" v-if="trackerCount > 0">
-              <el-tag type="success" size="small" effect="plain">
-                {{ t('settings.trackerCount', { count: trackerCount }) }}
-              </el-tag>
-            </div>
-            <div class="tracker-list" v-if="appStore.config?.trackerSource?.length">
-              <div
-                v-for="url in appStore.config.trackerSource"
-                :key="url"
-                class="tracker-source-item"
-              >
-                <div class="tracker-source-info">
-                  <span class="tracker-source-name">{{ getSourceName(url) }}</span>
-                  <span class="tracker-source-url" :title="url">{{ url }}</span>
-                </div>
-                <el-button
-                  size="small"
-                  type="danger"
-                  text
-                  circle
-                  @click="removeTrackerSource(url)"
-                >
-                  <el-icon><Close /></el-icon>
-                </el-button>
-              </div>
-            </div>
-            <div class="tracker-input">
-              <el-input
-                v-model="trackerInput"
-                :placeholder="t('settings.trackerPlaceholder')"
-                @keyup.enter="addTrackerSource"
-                size="small"
-              >
+            <el-form-item :label="t('settings.downloadDir')">
+              <el-input :model-value="appStore.config?.downloadDir" readonly>
                 <template #append>
-                  <el-button @click="addTrackerSource">{{ t('settings.trackerAdd') }}</el-button>
+                  <el-button @click="selectDownloadDir">
+                    <el-icon><FolderOpened /></el-icon>
+                  </el-button>
                 </template>
               </el-input>
-            </div>
-            <el-button size="small" @click="updateTrackers" :loading="trackerUpdating" class="update-btn">
-              <el-icon v-if="!trackerUpdating"><Refresh /></el-icon>
-              {{ t('settings.trackerUpdate') }}
-            </el-button>
-          </div>
-        </el-form-item>
+            </el-form-item>
 
-        <el-form-item :label="t('settings.btForceEncryption')">
-          <el-switch
-            :model-value="appStore.config?.btForceEncryption"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ btForceEncryption: Boolean(val) })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.btRequireCrypto')">
-          <el-switch
-            :model-value="appStore.config?.btRequireCrypto"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ btRequireCrypto: Boolean(val) })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.pauseMetadata')">
-          <el-switch
-            :model-value="appStore.config?.pauseMetadata"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ pauseMetadata: Boolean(val) })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.btSaveMetadata')">
-          <el-switch
-            :model-value="appStore.config?.btSaveMetadata"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ btSaveMetadata: Boolean(val) })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.btLoadSavedMetadata')">
-          <el-switch
-            :model-value="appStore.config?.btLoadSavedMetadata"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ btLoadSavedMetadata: Boolean(val) })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.btRemoveUnselectedFile')">
-          <el-switch
-            :model-value="appStore.config?.btRemoveUnselectedFile"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ btRemoveUnselectedFile: Boolean(val) })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.btDetachSeedOnly')">
-          <el-switch
-            :model-value="appStore.config?.btDetachSeedOnly"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ btDetachSeedOnly: Boolean(val) })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.keepSeeding')">
-          <el-switch
-            :model-value="appStore.config?.keepSeeding"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ keepSeeding: Boolean(val) })"
-          />
-          <div class="form-tip">{{ t('settings.keepSeedingTip') }}</div>
-        </el-form-item>
-
-        <!-- Proxy Settings -->
-        <h3 class="settings-section">{{ t('settings.proxy') }}</h3>
-
-        <el-form-item :label="t('settings.proxyEnable')">
-          <el-switch
-            :model-value="appStore.config?.proxyEnabled"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ proxyEnabled: Boolean(val) })"
-          />
-        </el-form-item>
-
-        <template v-if="appStore.config?.proxyEnabled">
-          <el-form-item :label="t('settings.proxyType')">
-            <el-select
-              :model-value="appStore.config?.proxyType"
-              @change="(val: string) => appStore.saveConfig({ proxyType: val as 'http' | 'https' | 'socks5' })"
-            >
-              <el-option label="HTTP" value="http" />
-              <el-option label="HTTPS" value="https" />
-              <el-option label="SOCKS5" value="socks5" />
-            </el-select>
-          </el-form-item>
-
-          <el-form-item :label="t('settings.proxyScope')">
-            <el-select
-              :model-value="appStore.config?.proxyScope || 'all'"
-              @change="(val: string) => appStore.saveConfig({ proxyScope: val as 'all' | 'http' | 'https' | 'ftp' })"
-            >
-              <el-option :label="t('settings.proxyScopeAll')" value="all" />
-              <el-option label="HTTP" value="http" />
-              <el-option label="HTTPS" value="https" />
-              <el-option label="FTP" value="ftp" />
-            </el-select>
-          </el-form-item>
-
-          <el-form-item :label="t('settings.proxyHost')">
-            <el-input
-              :model-value="appStore.config?.proxyHost"
-              placeholder="127.0.0.1"
-              @change="(val: string) => appStore.saveConfig({ proxyHost: val })"
-            />
-          </el-form-item>
-
-          <el-form-item :label="t('settings.proxyPort')">
-            <el-input-number
-              :model-value="appStore.config?.proxyPort"
-              :min="1"
-              :max="65535"
-              @change="(val: number | undefined) => val != null && appStore.saveConfig({ proxyPort: val })"
-            />
-          </el-form-item>
-
-          <el-form-item :label="t('settings.proxyUsername')">
-            <el-input
-              :model-value="appStore.config?.proxyUsername"
-              :placeholder="t('settings.optional')"
-              @change="(val: string) => appStore.saveConfig({ proxyUsername: val })"
-            />
-          </el-form-item>
-
-          <el-form-item :label="t('settings.proxyPassword')">
-            <el-input
-              :model-value="appStore.config?.proxyPassword"
-              type="password"
-              :placeholder="t('settings.optional')"
-              show-password
-              @change="(val: string) => appStore.saveConfig({ proxyPassword: val })"
-            />
-          </el-form-item>
-
-          <el-form-item :label="t('settings.noProxy')">
-            <el-input
-              :model-value="appStore.config?.noProxy"
-              :placeholder="t('settings.noProxyPlaceholder')"
-              @change="(val: string) => appStore.saveConfig({ noProxy: val })"
-            />
-          </el-form-item>
-        </template>
-
-        <!-- Advanced Settings -->
-        <h3 class="settings-section">{{ t('settings.advanced') }}</h3>
-
-        <el-form-item :label="t('settings.userAgent')">
-          <el-input
-            :model-value="appStore.config?.userAgent"
-            placeholder="Motrix/2.0.0"
-            @change="(val: string) => appStore.saveConfig({ userAgent: val })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.allowOverwrite')">
-          <el-switch
-            :model-value="appStore.config?.allowOverwrite"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ allowOverwrite: Boolean(val) })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.autoFileRenaming')">
-          <el-switch
-            :model-value="appStore.config?.autoFileRenaming"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ autoFileRenaming: Boolean(val) })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.continueDownload')">
-          <el-switch
-            :model-value="appStore.config?.continueDownload"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ continueDownload: Boolean(val) })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.followMetalink')">
-          <el-select
-            :model-value="appStore.config?.followMetalink"
-            @change="(val: string) => appStore.saveConfig({ followMetalink: val })"
-          >
-            <el-option label="true" value="true" />
-            <el-option label="false" value="false" />
-            <el-option label="mem" value="mem" />
-          </el-select>
-        </el-form-item>
-
-        <el-form-item :label="t('settings.rpcPort')">
-          <el-input-number
-            :model-value="appStore.config?.rpcPort"
-            :min="1024"
-            :max="65535"
-            @change="(val: number | undefined) => val != null && appStore.saveConfig({ rpcPort: val })"
-          />
-          <div class="form-tip">{{ t('settings.rpcPortTip') }}</div>
-        </el-form-item>
-
-        <el-form-item :label="t('settings.rpcListenAll')">
-          <el-switch
-            :model-value="appStore.config?.rpcListenAll"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ rpcListenAll: Boolean(val) })"
-          />
-          <div class="form-tip">{{ t('settings.rpcListenAllWarning') }}</div>
-        </el-form-item>
-
-        <el-form-item :label="t('settings.rpcAddress')">
-          <el-input
-            :model-value="rpcAddress"
-            readonly
-            style="max-width: 400px"
-          >
-            <template #append>
-              <el-button @click="copyRpcAddress">
-                <el-icon><CopyDocument /></el-icon>
-              </el-button>
-            </template>
-          </el-input>
-        </el-form-item>
-
-        <el-form-item :label="t('settings.traySpeedometer')">
-          <el-switch
-            :model-value="appStore.config?.traySpeedometer"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ traySpeedometer: Boolean(val) })"
-          />
-          <div class="form-tip">{{ t('settings.traySpeedometerTip') }}</div>
-        </el-form-item>
-
-        <el-form-item :label="t('settings.runMode')">
-          <el-radio-group
-            :model-value="appStore.config?.runMode || 'tray'"
-            @change="(val: string | number | boolean | undefined) => appStore.saveConfig({ runMode: (val || 'tray') as 'standard' | 'tray' | 'hide_tray' })"
-          >
-            <el-radio-button value="standard">{{ t('settings.runModeStandard') }}</el-radio-button>
-            <el-radio-button value="tray">{{ t('settings.runModeTray') }}</el-radio-button>
-            <el-radio-button value="hide_tray">{{ t('settings.runModeHideTray') }}</el-radio-button>
-          </el-radio-group>
-          <div class="form-tip">{{ t('settings.runModeTip') }}</div>
-        </el-form-item>
-
-        <el-form-item :label="t('settings.hideOnClose')">
-          <el-switch
-            :model-value="appStore.config?.hideOnClose"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ hideOnClose: Boolean(val) })"
-          />
-          <div class="form-tip">{{ t('settings.hideOnCloseTip') }}</div>
-        </el-form-item>
-
-        <el-form-item :label="t('settings.autoStart')">
-          <el-switch
-            :model-value="appStore.config?.autoStart"
-            @change="toggleAutoStart"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.startHidden')">
-          <el-switch
-            :model-value="appStore.config?.startHidden"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ startHidden: Boolean(val) })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.notifyOnComplete')">
-          <el-switch
-            :model-value="appStore.config?.notifyOnComplete"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ notifyOnComplete: Boolean(val) })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.autoClearCompleted')">
-          <el-switch
-            :model-value="appStore.config?.autoClearCompleted"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ autoClearCompleted: Boolean(val) })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.resumeAllWhenAppLaunched')">
-          <el-switch
-            :model-value="appStore.config?.resumeAllWhenAppLaunched"
-            @change="(val: string | number | boolean) => appStore.saveConfig({ resumeAllWhenAppLaunched: Boolean(val) })"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('settings.favoriteDirs')">
-          <div class="favorite-dirs">
-            <div v-if="appStore.config?.favoriteDirs?.length" class="favorite-dirs-list">
-              <div
-                v-for="dir in appStore.config.favoriteDirs"
-                :key="dir"
-                class="favorite-dir-item"
+            <el-form-item :label="t('settings.runMode')">
+              <el-radio-group
+                :model-value="appStore.config?.runMode || 'tray'"
+                @change="(val: string | number | boolean | undefined) => appStore.saveConfig({ runMode: (val || 'tray') as 'standard' | 'tray' | 'hide_tray' })"
               >
-                <span class="favorite-dir-path" :title="dir">{{ dir }}</span>
-                <el-button
-                  size="small"
-                  type="danger"
-                  text
-                  circle
-                  @click="removeFavoriteDir(dir)"
-                >
-                  <el-icon><Close /></el-icon>
+                <el-radio-button value="standard">{{ t('settings.runModeStandard') }}</el-radio-button>
+                <el-radio-button value="tray">{{ t('settings.runModeTray') }}</el-radio-button>
+                <el-radio-button value="hide_tray">{{ t('settings.runModeHideTray') }}</el-radio-button>
+              </el-radio-group>
+              <div class="form-tip">{{ t('settings.runModeTip') }}</div>
+            </el-form-item>
+
+            <el-form-item :label="t('settings.hideOnClose')">
+              <el-switch
+                :model-value="appStore.config?.hideOnClose"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ hideOnClose: Boolean(val) })"
+              />
+              <div class="form-tip">{{ t('settings.hideOnCloseTip') }}</div>
+            </el-form-item>
+            <el-form-item :label="t('settings.autoStart')">
+              <el-switch
+                :model-value="appStore.config?.autoStart"
+                @change="toggleAutoStart"
+              />
+            </el-form-item>
+
+            <el-form-item :label="t('settings.startHidden')">
+              <el-switch
+                :model-value="appStore.config?.startHidden"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ startHidden: Boolean(val) })"
+              />
+            </el-form-item>
+
+            <el-form-item :label="t('settings.notifyOnComplete')">
+              <el-switch
+                :model-value="appStore.config?.notifyOnComplete"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ notifyOnComplete: Boolean(val) })"
+              />
+            </el-form-item>
+
+            <el-form-item :label="t('settings.autoClearCompleted')">
+              <el-switch
+                :model-value="appStore.config?.autoClearCompleted"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ autoClearCompleted: Boolean(val) })"
+              />
+            </el-form-item>
+
+            <el-form-item :label="t('settings.resumeAllWhenAppLaunched')">
+              <el-switch
+                :model-value="appStore.config?.resumeAllWhenAppLaunched"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ resumeAllWhenAppLaunched: Boolean(val) })"
+              />
+            </el-form-item>
+
+            <el-form-item :label="t('settings.traySpeedometer')">
+              <el-switch
+                :model-value="appStore.config?.traySpeedometer"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ traySpeedometer: Boolean(val) })"
+              />
+              <div class="form-tip">{{ t('settings.traySpeedometerTip') }}</div>
+            </el-form-item>
+
+            <el-form-item :label="t('settings.favoriteDirs')">
+              <div class="favorite-dirs">
+                <div v-if="appStore.config?.favoriteDirs?.length" class="favorite-dirs-list">
+                  <div
+                    v-for="dir in appStore.config.favoriteDirs"
+                    :key="dir"
+                    class="favorite-dir-item"
+                  >
+                    <span class="favorite-dir-path" :title="dir">{{ dir }}</span>
+                    <el-button
+                      size="small"
+                      type="danger"
+                      text
+                      circle
+                      @click="removeFavoriteDir(dir)"
+                    >
+                      <el-icon><Close /></el-icon>
+                    </el-button>
+                  </div>
+                </div>
+                <div v-else class="form-tip">{{ t('settings.favoriteDirEmpty') }}</div>
+                <el-button size="small" @click="addFavoriteDir">
+                  <el-icon><FolderOpened /></el-icon>
+                  {{ t('settings.favoriteDirAdd') }}
                 </el-button>
               </div>
-            </div>
-            <div v-else class="form-tip">{{ t('settings.favoriteDirEmpty') }}</div>
-            <el-button size="small" @click="addFavoriteDir">
-              <el-icon><FolderOpened /></el-icon>
-              {{ t('settings.favoriteDirAdd') }}
-            </el-button>
-          </div>
-        </el-form-item>
+            </el-form-item>
+          </template>
 
-        <el-form-item :label="t('settings.rpcSecret')">
-          <el-input
-            :model-value="appStore.config?.rpcSecret"
-            :type="showRpcSecret ? 'text' : 'password'"
-            readonly
-            style="max-width: 320px"
-          >
-            <template #append>
-              <el-button @click="showRpcSecret = !showRpcSecret">
-                <el-icon><View v-if="!showRpcSecret" /><Hide v-else /></el-icon>
-              </el-button>
-              <el-button @click="copyRpcSecret">
-                <el-icon><CopyDocument /></el-icon>
-              </el-button>
-              <el-button @click="regenerateRpcSecret">
-                <el-icon><Refresh /></el-icon>
-              </el-button>
+          <!-- Download Settings Tab -->
+          <template v-if="activeTab === 'download'">
+            <el-form-item :label="t('settings.maxConcurrent')">
+              <el-input-number
+                :model-value="appStore.config?.maxConcurrentDownloads"
+                :min="1"
+                :max="20"
+                @change="(val: number | undefined) => val != null && appStore.saveConfig({ maxConcurrentDownloads: val })"
+              />
+            </el-form-item>
+
+            <el-form-item :label="t('settings.maxConnections')">
+              <el-input-number
+                :model-value="appStore.config?.maxConnectionPerServer"
+                :min="1"
+                :max="64"
+                @change="(val: number | undefined) => val != null && appStore.saveConfig({ maxConnectionPerServer: val })"
+              />
+            </el-form-item>
+
+            <el-form-item :label="t('settings.split')">
+              <el-input-number
+                :model-value="appStore.config?.split"
+                :min="1"
+                :max="64"
+                @change="(val: number | undefined) => val != null && appStore.saveConfig({ split: val })"
+              />
+            </el-form-item>
+
+            <el-form-item :label="t('settings.minSplitSize')">
+              <el-select
+                :model-value="appStore.config?.minSplitSize"
+                @change="(val: string) => appStore.saveConfig({ minSplitSize: val })"
+              >
+                <el-option
+                  v-for="opt in minSplitSizeOptions"
+                  :key="opt.value"
+                  :label="opt.label"
+                  :value="opt.value"
+                />
+              </el-select>
+              <div class="form-tip">{{ t('settings.minSplitSizeTip') }}</div>
+            </el-form-item>
+
+            <el-form-item :label="t('settings.maxDownloadSpeed')">
+              <el-select
+                :model-value="appStore.config?.maxDownloadLimit"
+                @change="(val: string) => appStore.saveConfig({ maxDownloadLimit: val })"
+              >
+                <el-option
+                  v-for="opt in speedOptions"
+                  :key="opt.value"
+                  :label="opt.label"
+                  :value="opt.value"
+                />
+              </el-select>
+            </el-form-item>
+
+            <el-form-item :label="t('settings.maxUploadSpeed')">
+              <el-select
+                :model-value="appStore.config?.maxUploadLimit"
+                @change="(val: string) => appStore.saveConfig({ maxUploadLimit: val })"
+              >
+                <el-option
+                  v-for="opt in speedOptions"
+                  :key="opt.value"
+                  :label="opt.label"
+                  :value="opt.value"
+                />
+              </el-select>
+            </el-form-item>
+
+            <el-form-item :label="t('settings.maxOverallDownloadLimit')">
+              <el-select
+                :model-value="appStore.config?.maxOverallDownloadLimit"
+                @change="(val: string) => appStore.saveConfig({ maxOverallDownloadLimit: val })"
+              >
+                <el-option
+                  v-for="opt in speedOptions"
+                  :key="opt.value"
+                  :label="opt.label"
+                  :value="opt.value"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('settings.maxOverallUploadLimit')">
+              <el-select
+                :model-value="appStore.config?.maxOverallUploadLimit"
+                @change="(val: string) => appStore.saveConfig({ maxOverallUploadLimit: val })"
+              >
+                <el-option
+                  v-for="opt in speedOptions"
+                  :key="opt.value"
+                  :label="opt.label"
+                  :value="opt.value"
+                />
+              </el-select>
+            </el-form-item>
+          </template>
+
+          <!-- BT Settings Tab -->
+          <template v-if="activeTab === 'bt'">
+            <el-form-item :label="t('settings.btPort')">
+              <el-input-number
+                :model-value="appStore.config?.btListenPort"
+                :min="1024"
+                :max="65535"
+                @change="(val: number | undefined) => val != null && appStore.saveConfig({ btListenPort: val })"
+              />
+            </el-form-item>
+
+            <el-form-item :label="t('settings.dhtPort')">
+              <el-input-number
+                :model-value="appStore.config?.dhtListenPort"
+                :min="1024"
+                :max="65535"
+                @change="(val: number | undefined) => val != null && appStore.saveConfig({ dhtListenPort: val })"
+              />
+            </el-form-item>
+
+            <el-form-item :label="t('settings.upnp')">
+              <el-switch
+                :model-value="appStore.config?.enableUpnp"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ enableUpnp: Boolean(val) })"
+              />
+            </el-form-item>
+
+            <el-form-item :label="t('settings.seedRatio')">
+              <el-input-number
+                :model-value="appStore.config?.seedRatio"
+                :min="0"
+                :max="10"
+                :step="0.1"
+                :precision="1"
+                @change="(val: number | undefined) => val != null && appStore.saveConfig({ seedRatio: val })"
+              />
+            </el-form-item>
+            <el-form-item :label="t('settings.seedTime')">
+              <el-input-number
+                :model-value="appStore.config?.seedTime"
+                :min="0"
+                :max="99999"
+                @change="(val: number | undefined) => val != null && appStore.saveConfig({ seedTime: val })"
+              />
+              <span class="input-suffix">{{ t('settings.seedTimeUnit') }}</span>
+              <div class="form-tip">{{ t('settings.seedTimeTip') }}</div>
+            </el-form-item>
+
+            <el-form-item :label="t('settings.trackers')">
+              <div class="tracker-sources">
+                <div class="tracker-status" v-if="trackerCount > 0">
+                  <el-tag type="success" size="small" effect="plain">
+                    {{ t('settings.trackerCount', { count: trackerCount }) }}
+                  </el-tag>
+                </div>
+                <div class="tracker-list" v-if="appStore.config?.trackerSource?.length">
+                  <div
+                    v-for="url in appStore.config.trackerSource"
+                    :key="url"
+                    class="tracker-source-item"
+                  >
+                    <div class="tracker-source-info">
+                      <span class="tracker-source-name">{{ getSourceName(url) }}</span>
+                      <span class="tracker-source-url" :title="url">{{ url }}</span>
+                    </div>
+                    <el-button
+                      size="small"
+                      type="danger"
+                      text
+                      circle
+                      @click="removeTrackerSource(url)"
+                    >
+                      <el-icon><Close /></el-icon>
+                    </el-button>
+                  </div>
+                </div>
+                <div class="tracker-input">
+                  <el-input
+                    v-model="trackerInput"
+                    :placeholder="t('settings.trackerPlaceholder')"
+                    @keyup.enter="addTrackerSource"
+                    size="small"
+                  >
+                    <template #append>
+                      <el-button @click="addTrackerSource">{{ t('settings.trackerAdd') }}</el-button>
+                    </template>
+                  </el-input>
+                </div>
+                <el-button size="small" @click="updateTrackers" :loading="trackerUpdating" class="update-btn">
+                  <el-icon v-if="!trackerUpdating"><Refresh /></el-icon>
+                  {{ t('settings.trackerUpdate') }}
+                </el-button>
+              </div>
+            </el-form-item>
+
+            <el-form-item :label="t('settings.btForceEncryption')">
+              <el-switch
+                :model-value="appStore.config?.btForceEncryption"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ btForceEncryption: Boolean(val) })"
+              />
+            </el-form-item>
+
+            <el-form-item :label="t('settings.btRequireCrypto')">
+              <el-switch
+                :model-value="appStore.config?.btRequireCrypto"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ btRequireCrypto: Boolean(val) })"
+              />
+            </el-form-item>
+
+            <el-form-item :label="t('settings.pauseMetadata')">
+              <el-switch
+                :model-value="appStore.config?.pauseMetadata"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ pauseMetadata: Boolean(val) })"
+              />
+            </el-form-item>
+
+            <el-form-item :label="t('settings.btSaveMetadata')">
+              <el-switch
+                :model-value="appStore.config?.btSaveMetadata"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ btSaveMetadata: Boolean(val) })"
+              />
+            </el-form-item>
+
+            <el-form-item :label="t('settings.btLoadSavedMetadata')">
+              <el-switch
+                :model-value="appStore.config?.btLoadSavedMetadata"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ btLoadSavedMetadata: Boolean(val) })"
+              />
+            </el-form-item>
+
+            <el-form-item :label="t('settings.btRemoveUnselectedFile')">
+              <el-switch
+                :model-value="appStore.config?.btRemoveUnselectedFile"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ btRemoveUnselectedFile: Boolean(val) })"
+              />
+            </el-form-item>
+            <el-form-item :label="t('settings.btDetachSeedOnly')">
+              <el-switch
+                :model-value="appStore.config?.btDetachSeedOnly"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ btDetachSeedOnly: Boolean(val) })"
+              />
+            </el-form-item>
+
+            <el-form-item :label="t('settings.keepSeeding')">
+              <el-switch
+                :model-value="appStore.config?.keepSeeding"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ keepSeeding: Boolean(val) })"
+              />
+              <div class="form-tip">{{ t('settings.keepSeedingTip') }}</div>
+            </el-form-item>
+          </template>
+
+          <!-- Proxy Settings Tab -->
+          <template v-if="activeTab === 'proxy'">
+            <el-form-item :label="t('settings.proxyEnable')">
+              <el-switch
+                :model-value="appStore.config?.proxyEnabled"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ proxyEnabled: Boolean(val) })"
+              />
+            </el-form-item>
+
+            <template v-if="appStore.config?.proxyEnabled">
+              <el-form-item :label="t('settings.proxyType')">
+                <el-select
+                  :model-value="appStore.config?.proxyType"
+                  @change="(val: string) => appStore.saveConfig({ proxyType: val as 'http' | 'https' | 'socks5' })"
+                >
+                  <el-option label="HTTP" value="http" />
+                  <el-option label="HTTPS" value="https" />
+                  <el-option label="SOCKS5" value="socks5" />
+                </el-select>
+              </el-form-item>
+
+              <el-form-item :label="t('settings.proxyScope')">
+                <el-select
+                  :model-value="appStore.config?.proxyScope || 'all'"
+                  @change="(val: string) => appStore.saveConfig({ proxyScope: val as 'all' | 'http' | 'https' | 'ftp' })"
+                >
+                  <el-option :label="t('settings.proxyScopeAll')" value="all" />
+                  <el-option label="HTTP" value="http" />
+                  <el-option label="HTTPS" value="https" />
+                  <el-option label="FTP" value="ftp" />
+                </el-select>
+              </el-form-item>
+              <el-form-item :label="t('settings.proxyHost')">
+                <el-input
+                  :model-value="appStore.config?.proxyHost"
+                  placeholder="127.0.0.1"
+                  @change="(val: string) => appStore.saveConfig({ proxyHost: val })"
+                />
+              </el-form-item>
+
+              <el-form-item :label="t('settings.proxyPort')">
+                <el-input-number
+                  :model-value="appStore.config?.proxyPort"
+                  :min="1"
+                  :max="65535"
+                  @change="(val: number | undefined) => val != null && appStore.saveConfig({ proxyPort: val })"
+                />
+              </el-form-item>
+
+              <el-form-item :label="t('settings.proxyUsername')">
+                <el-input
+                  :model-value="appStore.config?.proxyUsername"
+                  :placeholder="t('settings.optional')"
+                  @change="(val: string) => appStore.saveConfig({ proxyUsername: val })"
+                />
+              </el-form-item>
+
+              <el-form-item :label="t('settings.proxyPassword')">
+                <el-input
+                  :model-value="appStore.config?.proxyPassword"
+                  type="password"
+                  :placeholder="t('settings.optional')"
+                  show-password
+                  @change="(val: string) => appStore.saveConfig({ proxyPassword: val })"
+                />
+              </el-form-item>
+
+              <el-form-item :label="t('settings.noProxy')">
+                <el-input
+                  :model-value="appStore.config?.noProxy"
+                  :placeholder="t('settings.noProxyPlaceholder')"
+                  @change="(val: string) => appStore.saveConfig({ noProxy: val })"
+                />
+              </el-form-item>
             </template>
-          </el-input>
-          <div class="form-tip">{{ t('settings.rpcSecretTip') }}</div>
-        </el-form-item>
+          </template>
 
-        <!-- Developer Tools -->
-        <h3 class="settings-section">{{ t('settings.developerTools') }}</h3>
+          <!-- Advanced Settings Tab -->
+          <template v-if="activeTab === 'advanced'">
+            <el-form-item :label="t('settings.userAgent')">
+              <el-input
+                :model-value="appStore.config?.userAgent"
+                placeholder="Motrix/2.0.0"
+                @change="(val: string) => appStore.saveConfig({ userAgent: val })"
+              />
+            </el-form-item>
+            <el-form-item :label="t('settings.allowOverwrite')">
+              <el-switch
+                :model-value="appStore.config?.allowOverwrite"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ allowOverwrite: Boolean(val) })"
+              />
+            </el-form-item>
 
-        <el-form-item :label="t('settings.appDataDir')">
-          <el-input :model-value="appDataPaths?.appDataDir" readonly>
-            <template #append>
-              <el-button @click="openAppDataDir">
-                <el-icon><FolderOpened /></el-icon>
-              </el-button>
-            </template>
-          </el-input>
-        </el-form-item>
+            <el-form-item :label="t('settings.autoFileRenaming')">
+              <el-switch
+                :model-value="appStore.config?.autoFileRenaming"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ autoFileRenaming: Boolean(val) })"
+              />
+            </el-form-item>
 
-        <el-form-item :label="t('settings.logDir')">
-          <el-input :model-value="logPath" readonly>
-            <template #append>
-              <el-button @click="openLogDir">
-                <el-icon><FolderOpened /></el-icon>
-              </el-button>
-            </template>
-          </el-input>
-        </el-form-item>
+            <el-form-item :label="t('settings.continueDownload')">
+              <el-switch
+                :model-value="appStore.config?.continueDownload"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ continueDownload: Boolean(val) })"
+              />
+            </el-form-item>
 
-        <el-form-item :label="t('settings.sessionReset')">
-          <div class="reset-buttons">
-            <el-button @click="clearSession">
-              {{ t('settings.clearSession') }}
-            </el-button>
-            <el-button type="danger" @click="factoryReset">
-              {{ t('settings.factoryReset') }}
-            </el-button>
-          </div>
-        </el-form-item>
-      </el-form>
+            <el-form-item :label="t('settings.followMetalink')">
+              <el-select
+                :model-value="appStore.config?.followMetalink"
+                @change="(val: string) => appStore.saveConfig({ followMetalink: val })"
+              >
+                <el-option label="true" value="true" />
+                <el-option label="false" value="false" />
+                <el-option label="mem" value="mem" />
+              </el-select>
+            </el-form-item>
+
+            <el-form-item :label="t('settings.rpcPort')">
+              <el-input-number
+                :model-value="appStore.config?.rpcPort"
+                :min="1024"
+                :max="65535"
+                @change="(val: number | undefined) => val != null && appStore.saveConfig({ rpcPort: val })"
+              />
+              <div class="form-tip">{{ t('settings.rpcPortTip') }}</div>
+            </el-form-item>
+
+            <el-form-item :label="t('settings.rpcListenAll')">
+              <el-switch
+                :model-value="appStore.config?.rpcListenAll"
+                @change="(val: string | number | boolean) => appStore.saveConfig({ rpcListenAll: Boolean(val) })"
+              />
+              <div class="form-tip">{{ t('settings.rpcListenAllWarning') }}</div>
+            </el-form-item>
+            <el-form-item :label="t('settings.rpcAddress')">
+              <el-input
+                :model-value="rpcAddress"
+                readonly
+                style="max-width: 400px"
+              >
+                <template #append>
+                  <el-button @click="copyRpcAddress">
+                    <el-icon><CopyDocument /></el-icon>
+                  </el-button>
+                </template>
+              </el-input>
+            </el-form-item>
+
+            <el-form-item :label="t('settings.rpcSecret')">
+              <el-input
+                :model-value="appStore.config?.rpcSecret"
+                :type="showRpcSecret ? 'text' : 'password'"
+                readonly
+                style="max-width: 320px"
+              >
+                <template #append>
+                  <el-button @click="showRpcSecret = !showRpcSecret">
+                    <el-icon><View v-if="!showRpcSecret" /><Hide v-else /></el-icon>
+                  </el-button>
+                  <el-button @click="copyRpcSecret">
+                    <el-icon><CopyDocument /></el-icon>
+                  </el-button>
+                  <el-button @click="regenerateRpcSecret">
+                    <el-icon><Refresh /></el-icon>
+                  </el-button>
+                </template>
+              </el-input>
+              <div class="form-tip">{{ t('settings.rpcSecretTip') }}</div>
+            </el-form-item>
+          </template>
+
+          <!-- Developer Tools Tab -->
+          <template v-if="activeTab === 'developer'">
+            <el-form-item :label="t('settings.appDataDir')">
+              <el-input :model-value="appDataPaths?.appDataDir" readonly>
+                <template #append>
+                  <el-button @click="openAppDataDir">
+                    <el-icon><FolderOpened /></el-icon>
+                  </el-button>
+                </template>
+              </el-input>
+            </el-form-item>
+
+            <el-form-item :label="t('settings.logDir')">
+              <el-input :model-value="logPath" readonly>
+                <template #append>
+                  <el-button @click="openLogDir">
+                    <el-icon><FolderOpened /></el-icon>
+                  </el-button>
+                </template>
+              </el-input>
+            </el-form-item>
+            <el-form-item :label="t('settings.sessionReset')">
+              <div class="reset-buttons">
+                <el-button @click="clearSession">
+                  {{ t('settings.clearSession') }}
+                </el-button>
+                <el-button type="danger" @click="factoryReset">
+                  {{ t('settings.factoryReset') }}
+                </el-button>
+              </div>
+            </el-form-item>
+          </template>
+
+        </el-form>
+      </div>
     </div>
   </div>
 </template>
@@ -926,39 +939,85 @@ async function factoryReset() {
   flex-direction: column;
 }
 
-.settings-header {
+.settings-layout {
+  flex: 1;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.settings-tabs {
+  width: 160px;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--el-border-color-lighter);
+  padding: 16px 0;
+}
+
+.settings-tabs-header {
+  padding: 0 16px 16px;
 }
 
 .settings-title {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--el-text-color-primary);
   margin: 0;
 }
+.settings-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  margin: 0 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+  transition: all 0.2s;
 
-.settings-scroll {
-  flex: 1;
-  overflow-y: auto;
-  max-width: 640px;
-  padding-right: 12px;
+  &:hover {
+    background: var(--el-fill-color-light);
+    color: var(--el-text-color-primary);
+  }
+
+  &.active {
+    background: var(--motrix-rail-active-bg);
+    color: var(--motrix-primary);
+    font-weight: 500;
+  }
 }
 
-.settings-section {
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--el-text-color-primary);
-  margin: 24px 0 16px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
+.settings-tabs-footer {
+  margin-top: auto;
+  padding: 12px 8px;
+  border-top: 1px solid var(--el-border-color-lighter);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 
-  &:first-of-type {
-    margin-top: 0;
+  .settings-actions-row {
+    display: flex;
+    gap: 6px;
+
+    .el-button {
+      flex: 1;
+      justify-content: center;
+    }
   }
+
+  .reset-btn {
+    width: 100%;
+    justify-content: center;
+    color: var(--el-text-color-secondary);
+  }
+}
+
+.settings-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 24px;
+  max-width: 640px;
 }
 
 .tracker-sources {
@@ -975,7 +1034,6 @@ async function factoryReset() {
   gap: 4px;
   margin-bottom: 8px;
 }
-
 .tracker-source-item {
   display: flex;
   align-items: center;
@@ -1033,7 +1091,6 @@ async function factoryReset() {
   font-size: 13px;
   color: var(--el-text-color-secondary);
 }
-
 .reset-buttons {
   display: flex;
   gap: 8px;
