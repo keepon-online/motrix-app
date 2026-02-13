@@ -636,3 +636,22 @@ pub async fn bounce_dock() -> Result<()> {
     }
     Ok(())
 }
+
+/// Restart aria2 engine (manual trigger from frontend)
+#[tauri::command]
+pub async fn restart_engine(app: tauri::AppHandle) -> Result<()> {
+    aria2::restart_engine(&app).await
+}
+
+/// Update tray icon with speed information
+#[tauri::command]
+pub async fn update_tray_speed(
+    app: tauri::AppHandle,
+    download_speed: String,
+    upload_speed: String,
+    enabled: bool,
+) -> Result<()> {
+    crate::tray::update_tray_speed(&app, &download_speed, &upload_speed, enabled)
+        .map_err(|e| Error::Custom(format!("Failed to update tray speed: {}", e)))?;
+    Ok(())
+}

@@ -66,6 +66,19 @@ pub struct AppConfig {
 
     // Tracker auto-sync
     pub last_tracker_update: u64,
+
+    // Seeding
+    pub keep_seeding: bool,
+
+    // Tray speed
+    pub tray_speedometer: bool,
+
+    // History directories
+    pub recent_dirs: Vec<String>,
+    pub favorite_dirs: Vec<String>,
+
+    // RPC
+    pub rpc_listen_all: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -168,6 +181,12 @@ impl Default for AppConfig {
             no_proxy: String::new(),
 
             last_tracker_update: 0,
+
+            keep_seeding: true,
+            tray_speedometer: false,
+            recent_dirs: Vec::new(),
+            favorite_dirs: Vec::new(),
+            rpc_listen_all: false,
         }
     }
 }
@@ -191,7 +210,7 @@ impl AppConfig {
             format!("--rpc-listen-port={}", self.rpc_port),
             format!("--rpc-secret={}", self.rpc_secret),
             "--enable-rpc=true".to_string(),
-            "--rpc-listen-all=false".to_string(),
+            format!("--rpc-listen-all={}", self.rpc_listen_all),
             "--rpc-allow-origin-all=true".to_string(),
             "--enable-dht=true".to_string(),
             "--enable-dht6=true".to_string(),
@@ -213,6 +232,9 @@ impl AppConfig {
             format!("--bt-detach-seed-only={}", self.bt_detach_seed_only),
             format!("--follow-metalink={}", self.follow_metalink),
         ];
+
+        // UPnP is handled by the app's own upnp module, not by aria2c
+        // (aria2c 1.36 does not have --enable-upnp)
 
         // Add proxy settings if enabled
         if self.proxy_enabled && !self.proxy_host.is_empty() {

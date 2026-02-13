@@ -18,6 +18,12 @@ const showRpcSecret = ref(false)
 const appDataPaths = ref<AppDataPaths | null>(null)
 const logPath = ref('')
 
+const rpcAddress = computed(() => {
+  const host = appStore.config?.rpcListenAll ? '0.0.0.0' : '127.0.0.1'
+  const port = appStore.config?.rpcPort ?? 16800
+  return `ws://${host}:${port}/jsonrpc`
+})
+
 // Load paths on mount
 invoke<string>('get_log_path').then(p => logPath.value = p).catch(() => {})
 invoke<AppDataPaths>('get_app_data_paths').then(p => appDataPaths.value = p).catch(() => {})
@@ -222,6 +228,32 @@ async function copyRpcSecret() {
   } catch {
     ElMessage.error('Failed to copy')
   }
+}
+
+async function copyRpcAddress() {
+  try {
+    const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
+    await writeText(rpcAddress.value)
+    ElMessage.success(t('settings.rpcSecretCopied'))
+  } catch {
+    ElMessage.error('Failed to copy')
+  }
+}
+
+async function addFavoriteDir() {
+  const selected = await open({ directory: true, multiple: false })
+  if (selected) {
+    const dir = selected as string
+    const current = appStore.config?.favoriteDirs || []
+    if (!current.includes(dir)) {
+      await appStore.saveConfig({ favoriteDirs: [...current, dir] })
+    }
+  }
+}
+
+function removeFavoriteDir(dir: string) {
+  const current = appStore.config?.favoriteDirs || []
+  appStore.saveConfig({ favoriteDirs: current.filter(d => d !== dir) })
 }
 
 function regenerateRpcSecret() {
@@ -575,6 +607,14 @@ async function factoryReset() {
           />
         </el-form-item>
 
+        <el-form-item :label="t('settings.keepSeeding')">
+          <el-switch
+            :model-value="appStore.config?.keepSeeding"
+            @change="(val: string | number | boolean) => appStore.saveConfig({ keepSeeding: Boolean(val) })"
+          />
+          <div class="form-tip">{{ t('settings.keepSeedingTip') }}</div>
+        </el-form-item>
+
         <!-- Proxy Settings -->
         <h3 class="settings-section">{{ t('settings.proxy') }}</h3>
 
@@ -706,6 +746,36 @@ async function factoryReset() {
           <div class="form-tip">{{ t('settings.rpcPortTip') }}</div>
         </el-form-item>
 
+        <el-form-item :label="t('settings.rpcListenAll')">
+          <el-switch
+            :model-value="appStore.config?.rpcListenAll"
+            @change="(val: string | number | boolean) => appStore.saveConfig({ rpcListenAll: Boolean(val) })"
+          />
+          <div class="form-tip">{{ t('settings.rpcListenAllWarning') }}</div>
+        </el-form-item>
+
+        <el-form-item :label="t('settings.rpcAddress')">
+          <el-input
+            :model-value="rpcAddress"
+            readonly
+            style="max-width: 400px"
+          >
+            <template #append>
+              <el-button @click="copyRpcAddress">
+                <el-icon><CopyDocument /></el-icon>
+              </el-button>
+            </template>
+          </el-input>
+        </el-form-item>
+
+        <el-form-item :label="t('settings.traySpeedometer')">
+          <el-switch
+            :model-value="appStore.config?.traySpeedometer"
+            @change="(val: string | number | boolean) => appStore.saveConfig({ traySpeedometer: Boolean(val) })"
+          />
+          <div class="form-tip">{{ t('settings.traySpeedometerTip') }}</div>
+        </el-form-item>
+
         <el-form-item :label="t('settings.runMode')">
           <el-radio-group
             :model-value="appStore.config?.runMode || 'tray'"
@@ -759,6 +829,34 @@ async function factoryReset() {
             :model-value="appStore.config?.resumeAllWhenAppLaunched"
             @change="(val: string | number | boolean) => appStore.saveConfig({ resumeAllWhenAppLaunched: Boolean(val) })"
           />
+        </el-form-item>
+
+        <el-form-item :label="t('settings.favoriteDirs')">
+          <div class="favorite-dirs">
+            <div v-if="appStore.config?.favoriteDirs?.length" class="favorite-dirs-list">
+              <div
+                v-for="dir in appStore.config.favoriteDirs"
+                :key="dir"
+                class="favorite-dir-item"
+              >
+                <span class="favorite-dir-path" :title="dir">{{ dir }}</span>
+                <el-button
+                  size="small"
+                  type="danger"
+                  text
+                  circle
+                  @click="removeFavoriteDir(dir)"
+                >
+                  <el-icon><Close /></el-icon>
+                </el-button>
+              </div>
+            </div>
+            <div v-else class="form-tip">{{ t('settings.favoriteDirEmpty') }}</div>
+            <el-button size="small" @click="addFavoriteDir">
+              <el-icon><FolderOpened /></el-icon>
+              {{ t('settings.favoriteDirAdd') }}
+            </el-button>
+          </div>
         </el-form-item>
 
         <el-form-item :label="t('settings.rpcSecret')">
@@ -939,5 +1037,41 @@ async function factoryReset() {
 .reset-buttons {
   display: flex;
   gap: 8px;
+}
+
+.favorite-dirs {
+  width: 100%;
+}
+
+.favorite-dirs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.favorite-dir-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--el-fill-color-light);
+  transition: background 0.15s;
+
+  &:hover {
+    background: var(--el-fill-color);
+  }
+}
+
+.favorite-dir-path {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--el-text-color-primary);
 }
 </style>

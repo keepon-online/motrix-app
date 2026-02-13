@@ -198,6 +198,8 @@ fn main() {
             commands::set_window_progress,
             commands::set_dock_badge,
             commands::bounce_dock,
+            commands::update_tray_speed,
+            commands::restart_engine,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

@@ -86,7 +86,7 @@
     },
     "deep-link": {
       "desktop": {
-        "schemes": ["motrix", "magnet", "thunder"]
+        "schemes": ["motrix", "mo", "magnet", "thunder"]
       }
     },
     "updater": {

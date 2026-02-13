@@ -109,6 +109,15 @@ export interface AppConfig {
   btLoadSavedMetadata: boolean
   btRemoveUnselectedFile: boolean
   btDetachSeedOnly: boolean
+  // Feature 1: Seeding
+  keepSeeding: boolean
+  // Feature 3: Tray speed
+  traySpeedometer: boolean
+  // Feature 5: History directories
+  recentDirs: string[]
+  favoriteDirs: string[]
+  // Feature 6: RPC
+  rpcListenAll: boolean
 }
 
 // App data paths

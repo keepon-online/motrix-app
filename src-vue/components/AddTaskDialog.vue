@@ -40,6 +40,7 @@ const selectedFileIndices = ref<number[]>([])
 const metalinkFilePath = ref<string | null>(null)
 const metalinkFileName = ref('')
 const showAdvanced = ref(false)
+const showDirMenu = ref(false)
 
 // Options
 const downloadDir = ref(appStore.downloadDir)
@@ -54,6 +55,7 @@ const cookie = ref('')
 const authorization = ref('')
 
 const canSubmit = computed(() => {
+  if (!appStore.engineReady) return false
   if (activeTab.value === 'uri') {
     return uriInput.value.trim().length > 0
   }
@@ -151,6 +153,7 @@ async function selectMetalink() {
 }
 
 async function selectDirectory() {
+  showDirMenu.value = false
   const selected = await open({
     directory: true,
     multiple: false,
@@ -159,6 +162,11 @@ async function selectDirectory() {
   if (selected) {
     downloadDir.value = selected as string
   }
+}
+
+function selectDirFromMenu(dir: string) {
+  downloadDir.value = dir
+  showDirMenu.value = false
 }
 
 async function submit() {
@@ -211,8 +219,19 @@ async function submit() {
 
         if (uris.length === 0) return
 
+        let succeeded = 0
+        let failed = 0
         for (const uri of uris) {
-          await taskStore.addUri([uri], options)
+          try {
+            await taskStore.addUri([uri], options)
+            succeeded++
+          } catch (e) {
+            failed++
+            console.error('Failed to add URI:', uri, e)
+          }
+        }
+        if (failed > 0) {
+          ElMessage.warning(t('engine.addResult', { succeeded, failed }))
         }
       }
     } else if (activeTab.value === 'metalink' && metalinkFilePath.value) {
@@ -231,6 +250,10 @@ async function submit() {
       await invoke('add_torrent_file', { filePath: torrentFilePath.value, options })
     }
 
+    // Record the directory in recent dirs before resetting
+    if (downloadDir.value) {
+      appStore.addRecentDir(downloadDir.value)
+    }
     resetForm()
     visible.value = false
   } catch (error) {
@@ -332,13 +355,54 @@ function handleClose() {
 
     <el-form label-width="140px" label-position="left">
       <el-form-item :label="t('dialog.downloadDir')">
-        <el-input v-model="downloadDir" readonly>
-          <template #append>
-            <el-button @click="selectDirectory">
-              <el-icon><FolderOpened /></el-icon>
-            </el-button>
-          </template>
-        </el-input>
+        <div class="dir-select-wrapper">
+          <el-popover
+            :visible="showDirMenu"
+            placement="bottom-start"
+            :width="400"
+            trigger="click"
+            @update:visible="(v: boolean) => showDirMenu = v"
+          >
+            <template #reference>
+              <el-input v-model="downloadDir" readonly @click="showDirMenu = !showDirMenu" style="cursor: pointer">
+                <template #append>
+                  <el-button @click.stop="selectDirectory">
+                    <el-icon><FolderOpened /></el-icon>
+                  </el-button>
+                </template>
+              </el-input>
+            </template>
+            <div class="dir-menu">
+              <template v-if="appStore.config?.favoriteDirs?.length">
+                <div class="dir-menu-group">{{ t('settings.favoriteDirs') }}</div>
+                <div
+                  v-for="dir in appStore.config.favoriteDirs"
+                  :key="'fav-' + dir"
+                  class="dir-menu-item"
+                  @click="selectDirFromMenu(dir)"
+                >
+                  <el-icon><Star /></el-icon>
+                  <span class="dir-menu-path">{{ dir }}</span>
+                </div>
+              </template>
+              <template v-if="appStore.config?.recentDirs?.length">
+                <div class="dir-menu-group">{{ t('dialog.recentDirs') }}</div>
+                <div
+                  v-for="dir in appStore.config.recentDirs"
+                  :key="'recent-' + dir"
+                  class="dir-menu-item"
+                  @click="selectDirFromMenu(dir)"
+                >
+                  <el-icon><Clock /></el-icon>
+                  <span class="dir-menu-path">{{ dir }}</span>
+                </div>
+              </template>
+              <div v-if="!appStore.config?.favoriteDirs?.length && !appStore.config?.recentDirs?.length" class="dir-menu-empty">
+                {{ t('task.noTasks') }}
+              </div>
+            </div>
+          </el-popover>
+        </div>
       </el-form-item>
 
       <el-form-item :label="t('dialog.fileName')" v-if="activeTab === 'uri'">
@@ -382,6 +446,7 @@ function handleClose() {
     </el-form>
 
     <template #footer>
+      <span v-if="!appStore.engineReady" class="engine-not-ready">{{ t('engine.notReady') }}</span>
       <el-button @click="visible = false">{{ t('dialog.cancel') }}</el-button>
       <el-button type="primary" :disabled="!canSubmit" @click="submit">
         {{ t('dialog.add') }}
@@ -454,5 +519,54 @@ function handleClose() {
   &:hover {
     color: var(--el-color-primary);
   }
+}
+
+.dir-select-wrapper {
+  width: 100%;
+}
+
+.dir-menu-group {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+  padding: 6px 12px 4px;
+  text-transform: uppercase;
+}
+
+.dir-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 13px;
+  transition: background 0.15s;
+
+  &:hover {
+    background: var(--el-fill-color-light);
+  }
+}
+
+.dir-menu-path {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dir-menu-empty {
+  padding: 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.engine-not-ready {
+  float: left;
+  line-height: 32px;
+  font-size: 12px;
+  color: var(--el-color-danger);
 }
 </style>

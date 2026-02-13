@@ -34,18 +34,37 @@ function handleIncomingUrls(urls: string[]) {
   for (const url of urls) {
     // Handle torrent files directly
     if (url.toLowerCase().endsWith('.torrent')) {
-      // Torrent files need special handling - just open dialog
       downloadableUrls.push(url)
-    } else {
-      // Strip motrix:// prefix if present
-      const cleanUrl = url.replace(/^motrix:\/\//, '')
-      if (cleanUrl) downloadableUrls.push(cleanUrl)
+      continue
     }
+
+    // Parse structured motrix:// or mo:// URLs
+    const parsed = parseMotrixUrl(url)
+    if (parsed) {
+      downloadableUrls.push(parsed)
+      continue
+    }
+
+    // Strip motrix:// or mo:// prefix if present (simple form)
+    const cleanUrl = url.replace(/^(?:motrix|mo):\/\//, '')
+    if (cleanUrl) downloadableUrls.push(cleanUrl)
   }
 
   if (downloadableUrls.length > 0) {
     pendingUrls.value = downloadableUrls
     showAddDialog.value = true
+  }
+}
+
+/** Parse structured motrix://new-task?url=xxx or mo://new-task?url=xxx */
+function parseMotrixUrl(url: string): string | null {
+  const match = url.match(/^(?:motrix|mo):\/\/new-task\?(.+)$/i)
+  if (!match) return null
+  try {
+    const params = new URLSearchParams(match[1])
+    return params.get('url') || null
+  } catch {
+    return null
   }
 }
 

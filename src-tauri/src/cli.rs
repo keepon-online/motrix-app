@@ -41,6 +41,7 @@ pub fn is_downloadable_url(s: &str) -> bool {
         || lower.starts_with("magnet:")
         || lower.starts_with("thunder://")
         || lower.starts_with("motrix://")
+        || lower.starts_with("mo://")
 }
 
 /// Check if a string is a path to an existing .torrent file

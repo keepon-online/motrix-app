@@ -43,6 +43,7 @@ open = "5"
 reqwest = { version = "0.12", features = ["rustls-tls"], default-features = false }
 serde_bencode = "0.2"
 base64 = "0.22"
+igd-next = { version = "0.15", features = ["aio_tokio"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"

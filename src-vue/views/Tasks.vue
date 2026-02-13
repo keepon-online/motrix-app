@@ -41,6 +41,7 @@ const pageTitle = computed(() => {
   const status = route.params.status as string
   if (status === 'stopped') return t('nav.stopped')
   if (status === 'waiting') return t('nav.waiting')
+  if (status === 'seeding') return t('nav.seeding')
   return t('nav.downloads')
 })
 
@@ -51,6 +52,8 @@ const fetchTasks = () => {
     taskStore.fetchTasks('stopped')
   } else if (status === 'waiting') {
     taskStore.fetchTasks('waiting')
+  } else if (status === 'seeding') {
+    taskStore.fetchTasks('seeding')
   } else {
     taskStore.fetchTasks('active')
   }

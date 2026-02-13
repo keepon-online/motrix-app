@@ -74,6 +74,12 @@ export function useAria2Events() {
             ElNotification({ title: t('task.completed'), message: event.gid, type: 'success', duration: 5000 })
           }
         }
+        // Auto-pause seeding if keepSeeding is disabled (BT tasks only)
+        if (event.eventType === 'bt_download_complete' && appStore.config?.keepSeeding === false) {
+          invoke('force_pause_task', { gid: event.gid }).catch((e) => {
+            console.warn('Failed to auto-pause seeding task:', e)
+          })
+        }
         taskStore.fetchTasks('active')
         await taskStore.fetchTasks('stopped')
         taskStore.fetchGlobalStat()
@@ -118,14 +124,67 @@ export function useAria2Events() {
   }
 
   let unlistenConnection: UnlistenFn | null = null
+  let unlistenEngineDead: UnlistenFn | null = null
+  let autoRestartAttempts = 0
+  const MAX_AUTO_RESTART = 3
+  const RESTART_COOLDOWN = 10_000 // 10s between attempts
+  let lastRestartTime = 0
 
   async function setupConnectionListener() {
     try {
       unlistenConnection = await listen<string>('aria2-connection', (event) => {
         if (event.payload === 'connected') {
+          appStore.engineReady = true
+          appStore.engineError = ''
+          autoRestartAttempts = 0 // Reset on successful connection
           // Refresh all task lists after reconnection
           taskStore.fetchTasks()
           taskStore.fetchGlobalStat()
+        } else if (event.payload === 'disconnected') {
+          appStore.engineReady = false
+        }
+      })
+    } catch {
+      // ignore
+    }
+  }
+
+  async function setupEngineDeadListener() {
+    try {
+      unlistenEngineDead = await listen<string>('aria2-engine-dead', async (event) => {
+        appStore.engineReady = false
+        appStore.engineError = event.payload || 'engine_dead'
+
+        // Check cooldown and retry limit
+        const now = Date.now()
+        if (now - lastRestartTime < RESTART_COOLDOWN) {
+          return // Too soon, skip
+        }
+
+        if (autoRestartAttempts >= MAX_AUTO_RESTART) {
+          ElNotification({
+            title: t('engine.disconnected'),
+            message: t('engine.restartFailed'),
+            type: 'error',
+            duration: 0, // Persistent until dismissed
+          })
+          return
+        }
+
+        autoRestartAttempts++
+        lastRestartTime = now
+
+        ElNotification({
+          title: t('engine.disconnected'),
+          message: t('engine.reconnecting'),
+          type: 'warning',
+          duration: 5000,
+        })
+
+        try {
+          await invoke('restart_engine')
+        } catch (e) {
+          console.error('Auto-restart engine failed:', e)
         }
       })
     } catch {
@@ -136,6 +195,7 @@ export function useAria2Events() {
   onMounted(() => {
     setupEventListener()
     setupConnectionListener()
+    setupEngineDeadListener()
   })
 
   onUnmounted(() => {
@@ -144,6 +204,9 @@ export function useAria2Events() {
     }
     if (unlistenConnection) {
       unlistenConnection()
+    }
+    if (unlistenEngineDead) {
+      unlistenEngineDead()
     }
   })
 

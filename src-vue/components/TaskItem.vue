@@ -92,6 +92,7 @@ const statusClass = computed(() => {
 })
 
 const statusText = computed(() => {
+  if (isSeedingTask.value) return t('task.seeding')
   const statusMap: Record<string, string> = {
     active: t('task.downloading'),
     waiting: t('task.waiting'),
@@ -111,6 +112,11 @@ const isPaused = computed(() => props.task.status === 'paused' || props.task.sta
 const isWaiting = computed(() => props.task.status === 'waiting' || props.task.status === 'paused')
 const isComplete = computed(() => props.task.status === 'complete')
 const isError = computed(() => props.task.status === 'error')
+const isSeedingTask = computed(() => {
+  return props.task.status === 'active'
+    && props.task.totalLength !== '0'
+    && props.task.completedLength === props.task.totalLength
+})
 
 const firstFilePath = computed(() => {
   if (props.task.files?.[0]?.path) return props.task.files[0].path
@@ -169,11 +175,15 @@ async function copyLink() {
       <div class="task-name" :title="taskName">{{ taskName }}</div>
       <div class="task-meta">
         <span class="task-size">{{ completedSize }} / {{ totalSize }}</span>
-        <span v-if="isActive" class="task-speed">
+        <span v-if="isSeedingTask" class="task-speed">
+          <el-icon><Upload /></el-icon> {{ uploadSpeed }}
+        </span>
+        <span v-else-if="isActive" class="task-speed">
           <el-icon><Download /></el-icon> {{ downloadSpeed }}
           <el-icon style="margin-left: 8px"><Upload /></el-icon> {{ uploadSpeed }}
         </span>
-        <span v-if="isActive" class="task-eta">{{ t('detail.eta') }}: {{ remainingTime }}</span>
+        <span v-if="isActive && !isSeedingTask" class="task-eta">{{ t('detail.eta') }}: {{ remainingTime }}</span>
+        <span v-if="isSeedingTask" class="task-status">{{ statusText }}</span>
         <span v-if="!isActive" class="task-status" :title="statusText">{{ statusText }}</span>
       </div>
       <el-progress

@@ -9,6 +9,8 @@ export const useAppStore = defineStore('app', () => {
   const config = ref<AppConfig | null>(null)
   const loading = ref(false)
   const initialized = ref(false)
+  const engineReady = ref(false)
+  const engineError = ref('')
 
   // Getters
   const isDark = computed(() => {
@@ -140,6 +142,14 @@ export const useAppStore = defineStore('app', () => {
     await saveConfig({ downloadDir: dir })
   }
 
+  async function addRecentDir(dir: string) {
+    if (!config.value) return
+    const dirs = config.value.recentDirs.filter(d => d !== dir)
+    dirs.unshift(dir)
+    if (dirs.length > 10) dirs.length = 10
+    await saveConfig({ recentDirs: dirs })
+  }
+
   const TRACKER_SYNC_INTERVAL = 12 * 60 * 60 * 1000 // 12 hours
 
   async function autoSyncTrackers() {
@@ -230,6 +240,11 @@ export const useAppStore = defineStore('app', () => {
       btLoadSavedMetadata: true,
       btRemoveUnselectedFile: false,
       btDetachSeedOnly: false,
+      keepSeeding: true,
+      traySpeedometer: false,
+      recentDirs: [],
+      favoriteDirs: [],
+      rpcListenAll: false,
     }
   }
 
@@ -238,6 +253,8 @@ export const useAppStore = defineStore('app', () => {
     config,
     loading,
     initialized,
+    engineReady,
+    engineError,
     // Getters
     isDark,
     locale,
@@ -248,6 +265,7 @@ export const useAppStore = defineStore('app', () => {
     setTheme,
     setLocale,
     setDownloadDir,
+    addRecentDir,
     resetConfig,
     autoSyncTrackers,
   }

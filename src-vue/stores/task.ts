@@ -3,7 +3,14 @@ import { ref, computed } from 'vue'
 import type { Task, GlobalStat, AddTaskOptions } from '@/types'
 import { invoke } from '@tauri-apps/api/core'
 
-export type TaskListType = 'active' | 'waiting' | 'stopped'
+/** Check if a task is seeding (download complete but still uploading) */
+function isSeeding(t: Task): boolean {
+  return t.status === 'active'
+    && t.totalLength !== '0'
+    && t.completedLength === t.totalLength
+}
+
+export type TaskListType = 'active' | 'waiting' | 'stopped' | 'seeding'
 export type SortField = 'name' | 'size' | 'progress' | 'speed' | 'default'
 export type SortOrder = 'asc' | 'desc'
 
@@ -19,6 +26,7 @@ export const useTaskStore = defineStore('task', () => {
   const searchQuery = ref('')
   const sortField = ref<SortField>('default')
   const sortOrder = ref<SortOrder>('asc')
+  const cachedSeedingCount = ref(0)
 
   // Getters
   const filteredTasks = computed(() => {
@@ -73,12 +81,23 @@ export const useTaskStore = defineStore('task', () => {
     return result
   })
 
+  const seedingCount = computed(() => {
+    return tasks.value.filter(t => isSeeding(t)).length
+  })
+
   // Actions
   async function fetchTasks(type?: TaskListType) {
     const listType = type ?? currentListType.value
 
     try {
-      const result = await invoke<Task[]>('get_task_list', { taskType: listType })
+      // Seeding tasks are filtered from active list on the frontend
+      const fetchType = listType === 'seeding' ? 'active' : listType
+      let result = await invoke<Task[]>('get_task_list', { taskType: fetchType })
+
+      if (listType === 'seeding') {
+        result = result.filter(t => isSeeding(t))
+      }
+
       tasks.value = result
       currentListType.value = listType
 
@@ -93,6 +112,11 @@ export const useTaskStore = defineStore('task', () => {
   async function fetchGlobalStat() {
     try {
       globalStat.value = await invoke<GlobalStat>('get_global_stat')
+      // Update seeding count from active tasks (only if not currently viewing seeding list)
+      if (currentListType.value !== 'seeding') {
+        const activeTasks = await invoke<Task[]>('get_task_list', { taskType: 'active' })
+        cachedSeedingCount.value = activeTasks.filter(t => isSeeding(t)).length
+      }
     } catch (error) {
       console.error('Failed to fetch global stat:', error)
     }
@@ -357,8 +381,10 @@ export const useTaskStore = defineStore('task', () => {
     searchQuery,
     sortField,
     sortOrder,
+    cachedSeedingCount,
     // Getters
     filteredTasks,
+    seedingCount,
     // Actions
     fetchTasks,
     fetchGlobalStat,

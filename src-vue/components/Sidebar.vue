@@ -13,6 +13,19 @@ const route = useRoute()
 const taskStore = useTaskStore()
 const appStore = useAppStore()
 
+const reconnecting = ref(false)
+
+async function handleReconnect() {
+  reconnecting.value = true
+  try {
+    await invoke('restart_engine')
+  } catch (e) {
+    console.error('Failed to restart engine:', e)
+  } finally {
+    reconnecting.value = false
+  }
+}
+
 const speedLimitPresets = ['0', '128K', '512K', '1M', '5M', '10M']
 const showSpeedMenu = ref(false)
 
@@ -42,9 +55,11 @@ async function setSpeedLimit(limit: string) {
 const numActive = computed(() => parseInt(taskStore.globalStat?.numActive ?? '0'))
 const numWaiting = computed(() => parseInt(taskStore.globalStat?.numWaiting ?? '0'))
 const numStopped = computed(() => parseInt(taskStore.globalStat?.numStopped ?? '0'))
+const numSeeding = computed(() => taskStore.cachedSeedingCount)
 
 const menuItems = computed(() => [
   { path: '/tasks/active', icon: 'Download', label: t('nav.downloads'), badge: numActive.value },
+  { path: '/tasks/seeding', icon: 'Upload', label: t('nav.seeding'), badge: numSeeding.value },
   { path: '/tasks/waiting', icon: 'Clock', label: t('nav.waiting'), badge: numWaiting.value },
   { path: '/tasks/stopped', icon: 'Finished', label: t('nav.stopped'), badge: numStopped.value },
 ])
@@ -78,6 +93,15 @@ watch(() => taskStore.globalStat, (stat) => {
   } else {
     invoke('set_window_progress', { progress: 0 }).catch(() => {})
   }
+}, { deep: true })
+
+// Update tray speed display
+watch(() => taskStore.globalStat, (stat) => {
+  invoke('update_tray_speed', {
+    downloadSpeed: stat?.downloadSpeed ?? '0',
+    uploadSpeed: stat?.uploadSpeed ?? '0',
+    enabled: appStore.config?.traySpeedometer ?? false,
+  }).catch(() => {})
 }, { deep: true })
 </script>
 
@@ -132,6 +156,18 @@ watch(() => taskStore.globalStat, (stat) => {
       </el-popover>
 
       <div class="sidebar-actions">
+        <div class="engine-status" :class="{ connected: appStore.engineReady, disconnected: !appStore.engineReady }">
+          <span class="status-dot" />
+          <span class="status-text">{{ appStore.engineReady ? t('engine.connected') : t('engine.disconnected') }}</span>
+          <el-button
+            v-if="!appStore.engineReady"
+            size="small"
+            :loading="reconnecting"
+            @click="handleReconnect"
+          >
+            {{ t('engine.reconnect') }}
+          </el-button>
+        </div>
         <router-link to="/settings" class="action-btn" :class="{ active: route.path === '/settings' }">
           <el-icon :size="20"><Setting /></el-icon>
         </router-link>
@@ -242,6 +278,44 @@ watch(() => taskStore.globalStat, (stat) => {
 .sidebar-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.engine-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .status-text {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &.connected .status-dot {
+    background: var(--el-color-success);
+  }
+
+  &.disconnected .status-dot {
+    background: var(--el-color-danger);
+  }
+
+  &.disconnected .status-text {
+    color: var(--el-color-danger);
+  }
 }
 
 .action-btn {

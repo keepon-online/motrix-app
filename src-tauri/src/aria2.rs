@@ -4,7 +4,7 @@ use crate::{Error, Result};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
@@ -60,13 +60,18 @@ struct RpcRequest {
 static ARIA2_CLIENT: RwLock<Option<Arc<Aria2Client>>> = RwLock::const_new(None);
 
 /// Global aria2 child process handle (must be kept alive to prevent process from being killed)
-static ARIA2_PROCESS: Mutex<Option<tauri_plugin_shell::process::CommandChild>> = Mutex::const_new(None);
+static ARIA2_PROCESS: Mutex<Option<std::process::Child>> = Mutex::const_new(None);
+
+/// Guard to prevent concurrent restart attempts
+static RESTARTING: AtomicBool = AtomicBool::new(false);
 
 /// Kill any orphaned aria2c processes listening on the given port
 fn kill_orphaned_aria2c(port: u16) {
+    let my_pid = std::process::id();
+
     #[cfg(target_os = "windows")]
     {
-        // Find PIDs listening on the port and kill them
+        // Find PIDs listening on the port and kill them (LISTENING state only)
         let output = std::process::Command::new("cmd")
             .args(["/C", &format!("netstat -ano | findstr \"LISTENING\" | findstr \":{port}\"")])
             .output();
@@ -75,7 +80,7 @@ fn kill_orphaned_aria2c(port: u16) {
             for line in stdout.lines() {
                 if let Some(pid_str) = line.split_whitespace().last() {
                     if let Ok(pid) = pid_str.parse::<u32>() {
-                        if pid > 0 {
+                        if pid > 0 && pid != my_pid {
                             tracing::info!("Killing orphaned process on port {} (PID: {})", port, pid);
                             let _ = std::process::Command::new("taskkill")
                                 .args(["/F", "/PID", &pid.to_string()])
@@ -88,15 +93,15 @@ fn kill_orphaned_aria2c(port: u16) {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        // Use lsof to find process on the port
+        // Use lsof to find processes LISTENING on the port (not connected clients)
         let output = std::process::Command::new("lsof")
-            .args(["-ti", &format!(":{port}")])
+            .args(["-ti", &format!(":{port}"), "-sTCP:LISTEN"])
             .output();
         if let Ok(output) = output {
             let stdout = String::from_utf8_lossy(&output.stdout);
             for pid_str in stdout.split_whitespace() {
                 if let Ok(pid) = pid_str.parse::<u32>() {
-                    if pid > 0 {
+                    if pid > 0 && pid != my_pid {
                         tracing::info!("Killing orphaned process on port {} (PID: {})", port, pid);
                         let _ = std::process::Command::new("kill")
                             .args(["-9", &pid.to_string()])
@@ -110,15 +115,53 @@ fn kill_orphaned_aria2c(port: u16) {
 
 /// Force kill the managed aria2c child process
 pub async fn force_kill_process() {
-    let mut guard = ARIA2_PROCESS.lock().await;
-    if let Some(child) = guard.take() {
-        tracing::info!("Force killing aria2c child process");
+    if let Some(mut child) = ARIA2_PROCESS.lock().await.take() {
+        tracing::info!("Force killing aria2c child process (PID: {})", child.id());
         let _ = child.kill();
+        let _ = child.wait();
     }
 }
 
-/// Graceful shutdown: try RPC shutdown first, then force kill as fallback
+/// Check if the managed aria2c child process is still alive
+pub async fn check_process_alive() -> bool {
+    let mut guard = ARIA2_PROCESS.lock().await;
+    if let Some(ref mut child) = *guard {
+        match child.try_wait() {
+            Ok(Some(_status)) => false, // Process has exited
+            Ok(None) => true,           // Still running
+            Err(_) => false,            // Error checking = assume dead
+        }
+    } else {
+        false
+    }
+}
+
+/// Restart the aria2 engine: shutdown + cleanup, then re-init
+/// Returns error if already restarting (prevents concurrent/looping restarts)
+pub async fn restart_engine(app: &AppHandle) -> Result<()> {
+    // Acquire restart lock — bail if another restart is in progress
+    if RESTARTING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        tracing::warn!("restart_engine: already restarting, skipping");
+        return Err(Error::Custom("Engine restart already in progress".to_string()));
+    }
+
+    let result = async {
+        tracing::info!("Restarting aria2 engine...");
+        shutdown_and_cleanup().await;
+        init_engine(app).await
+    }.await;
+
+    // Release lock
+    RESTARTING.store(false, Ordering::SeqCst);
+    result
+}
+
+/// Graceful shutdown: try RPC shutdown first, then force kill as fallback.
+/// Always waits for the child process to fully exit before returning.
 pub async fn shutdown_and_cleanup() {
+    // Clean up UPnP port mappings
+    crate::upnp::unmap_ports().await;
+
     // Try graceful RPC shutdown
     let rpc_ok = if let Ok(client) = get_client().await {
         let _ = client.save_session().await;
@@ -127,9 +170,27 @@ pub async fn shutdown_and_cleanup() {
         false
     };
 
-    if !rpc_ok {
-        tracing::warn!("RPC shutdown failed, force killing aria2c process");
-        force_kill_process().await;
+    // Always take and reap the child process
+    if let Some(mut child) = ARIA2_PROCESS.lock().await.take() {
+        if rpc_ok {
+            // Wait up to 3s for graceful exit
+            let mut exited = false;
+            for _ in 0..10 {
+                match child.try_wait() {
+                    Ok(Some(_)) => { exited = true; break; }
+                    _ => tokio::time::sleep(tokio::time::Duration::from_millis(300)).await,
+                }
+            }
+            if !exited {
+                tracing::warn!("aria2c did not exit gracefully, force killing");
+                let _ = child.kill();
+            }
+        } else {
+            tracing::warn!("RPC shutdown failed, force killing aria2c process");
+            let _ = child.kill();
+        }
+        // Reap the process to release the port and avoid zombies
+        let _ = child.wait();
     }
 
     // Clear the global client
@@ -193,14 +254,24 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
     *guard = Some(client);
 
     tracing::info!("Aria2 engine initialized on port {}", port);
+
+    // Notify frontend that engine is connected
+    let _ = app.emit("aria2-connection", "connected");
+
+    // Start UPnP port mapping if enabled (non-blocking)
+    if config.enable_upnp {
+        let bt_port = config.bt_listen_port;
+        let dht_port = config.dht_listen_port;
+        tokio::spawn(async move {
+            crate::upnp::map_ports(bt_port, dht_port).await;
+        });
+    }
+
     Ok(())
 }
 
 /// Start aria2 process
 async fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Result<()> {
-    use tauri_plugin_shell::ShellExt;
-
-    let shell = app.shell();
 
     // Ensure session directory exists — use portable dir if available
     let app_data_dir = {
@@ -217,10 +288,16 @@ async fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig)
         .map_err(|e| Error::Custom(format!("Failed to create app data dir: {}", e)))?;
 
     let session_path = app_data_dir.join("aria2.session");
-    // Create session file if it doesn't exist
+    // Ensure session file exists (aria2c needs it before starting)
     if !session_path.exists() {
         std::fs::File::create(&session_path)
             .map_err(|e| Error::Custom(format!("Failed to create session file: {}", e)))?;
+    }
+    // Verify session file is a regular file (not directory)
+    if session_path.is_dir() {
+        let _ = std::fs::remove_dir(&session_path);
+        std::fs::File::create(&session_path)
+            .map_err(|e| Error::Custom(format!("Failed to recreate session file: {}", e)))?;
     }
 
     let dht_path = app_data_dir.join("dht.dat");
@@ -251,14 +328,40 @@ async fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig)
     }
 
     // Spawn aria2c process
-    let (mut _rx, child) = shell
-        .sidecar("aria2c")
-        .map_err(|e| Error::Custom(format!("Failed to create aria2c sidecar: {}", e)))?
-        .args(&args)
+    // Use std::process::Command for better control over environment
+    // Resolve sidecar binary path (handles both dev and production layouts)
+    let sidecar_path = resolve_sidecar_path(app)?;
+
+    tracing::debug!("Spawning aria2c from: {}", sidecar_path.display());
+
+    // Build the command with cleaned environment (remove proxy vars)
+    let mut cmd = std::process::Command::new(&sidecar_path);
+
+    // Remove proxy environment variables that might confuse aria2c
+    let clean_env: Vec<(String, String)> = std::env::vars_os()
+        .filter(|(k, _)| {
+            let key = k.to_string_lossy().to_lowercase();
+            key != "all_proxy"
+                && key != "http_proxy"
+                && key != "https_proxy"
+                && key != "no_proxy"
+        })
+        .filter_map(|(k, v)| Some((k.to_string_lossy().to_string(), v.to_string_lossy().to_string())))
+        .collect();
+    cmd.env_clear();
+    for (k, v) in clean_env {
+        cmd.env(k, v);
+    }
+
+    // Add all config arguments
+    cmd.args(&args);
+
+    // Spawn and keep child alive
+    let child = cmd
         .spawn()
         .map_err(|e| Error::Custom(format!("Failed to spawn aria2c: {}", e)))?;
 
-    // Store child process globally to keep it alive (dropping CommandChild kills the process)
+    // Store child process globally to keep it alive
     let mut process_guard = ARIA2_PROCESS.lock().await;
     *process_guard = Some(child);
 
@@ -363,7 +466,8 @@ impl Aria2Client {
                                     }
                                 }
                                 if !reconnected {
-                                    tracing::error!("Failed to reconnect after 10 attempts, giving up");
+                                    tracing::error!("Failed to reconnect after 10 attempts");
+                                    let _ = event_app_handle.emit("aria2-engine-dead", "reconnect_failed");
                                     break;
                                 }
                             }
@@ -603,6 +707,50 @@ impl Aria2Client {
         // Save session before shutdown
         let _ = self.save_session().await;
         self.call("shutdown", vec![]).await
+    }
+}
+
+/// Resolve the aria2c sidecar binary path.
+/// Tries multiple candidate locations to support both dev and production:
+///   1. resource_dir/aria2c-{triple}       (production bundle)
+///   2. resource_dir/aria2c(.exe)           (dev mode — Tauri copies without triple)
+///   3. src-tauri/binaries/aria2c-{triple}  (dev fallback)
+fn resolve_sidecar_path(app: &AppHandle) -> Result<std::path::PathBuf> {
+    let ext = if cfg!(windows) { ".exe" } else { "" };
+    let triple = target_triple();
+    let full_name = format!("aria2c-{}{}", triple, ext);
+    let short_name = format!("aria2c{}", ext);
+
+    let resource_dir = app.path().resource_dir()?;
+
+    let candidates = [
+        resource_dir.join(&full_name),
+        resource_dir.join(&short_name),
+        resource_dir.join("binaries").join(&full_name),
+    ];
+
+    for path in &candidates {
+        if path.exists() {
+            return Ok(path.clone());
+        }
+    }
+
+    Err(Error::Custom(format!(
+        "aria2c sidecar binary not found. Searched: {}",
+        candidates.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", ")
+    )))
+}
+
+/// Return the Rust target triple for the current platform
+fn target_triple() -> &'static str {
+    match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("linux", "x86_64") => "x86_64-unknown-linux-gnu",
+        ("linux", "aarch64") => "aarch64-unknown-linux-gnu",
+        ("macos", "x86_64") => "x86_64-apple-darwin",
+        ("macos", "aarch64") => "aarch64-apple-darwin",
+        ("windows", "x86_64") => "x86_64-pc-windows-msvc",
+        ("windows", "aarch64") => "aarch64-pc-windows-msvc",
+        _ => "x86_64-unknown-linux-gnu",
     }
 }
 
