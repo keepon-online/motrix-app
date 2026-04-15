@@ -187,7 +187,7 @@ async fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig)
         .map_err(|e| Error::Custom(format!("Failed to write aria2 conf: {}", e)))?;
     args.push(format!("--conf-path={}", conf_path.display()));
 
-    let (rx, child) = shell
+    let (mut rx, child) = shell
         .sidecar("aria2c")
         .map_err(|e| Error::Custom(format!("Failed to create aria2c sidecar: {}", e)))?
         .args(&args)

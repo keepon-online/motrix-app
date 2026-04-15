@@ -62,7 +62,7 @@ impl Aria2Client {
             .map_err(|e| Error::WebSocket(e.to_string()))?;
 
         let (write, read) = ws_stream.split();
-        let (tx, rx) = mpsc::channel::<RpcRequest>(100);
+        let (tx, mut rx) = mpsc::channel::<RpcRequest>(100);
         let healthy = Arc::new(AtomicBool::new(true));
         let alive = Arc::new(AtomicBool::new(true));
 
@@ -246,9 +246,7 @@ impl Aria2Client {
             .map_err(|_| Error::Aria2Rpc("Failed to send request — engine task exited".into()))?;
 
         match tokio::time::timeout(Duration::from_secs(30), rx).await {
-            Ok(result) => {
-                result.map_err(|_| Error::Aria2Rpc("Failed to receive response".into()))
-            }
+            Ok(result) => result.map_err(|_| Error::Aria2Rpc("Failed to receive response".into())),
             Err(_) => Err(Error::Aria2Rpc("RPC call timed out (30s)".into())),
         }
     }

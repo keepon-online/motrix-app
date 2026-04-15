@@ -27,7 +27,10 @@ pub fn create_tray<R: Runtime>(app: &tauri::App<R>) -> Result<(), tauri::Error> 
     let menu = Menu::with_items(app, &[&show_i, &pause_all_i, &resume_all_i, &quit_i])?;
 
     let default_icon = app.default_window_icon()
-        .ok_or_else(|| tauri::Error::Setup("No default window icon found".to_string()))?
+        .ok_or_else(|| tauri::Error::Setup(Box::new(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "No default window icon found",
+        ))))?
         .clone();
 
     let _tray = TrayIconBuilder::with_id("main")
