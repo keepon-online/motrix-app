@@ -83,11 +83,11 @@ pub(crate) async fn force_kill_process() {
 pub async fn shutdown_and_cleanup() {
     SHUTTING_DOWN.store(true, Ordering::SeqCst);
 
-    // Mark the client as shutting down so the reconnection loop stops
     if let Ok(client) = get_client().await {
-        client.mark_shutdown();
         let _ = client.save_session().await;
         let rpc_ok = client.shutdown().await.is_ok();
+        // Stop reconnection loop AFTER RPC calls so shutdown() isn't blocked
+        client.mark_shutdown();
         if !rpc_ok {
             tracing::warn!("RPC shutdown failed, force killing aria2c process");
             force_kill_process().await;
