@@ -174,10 +174,6 @@ const uploadSpeedText = computed(() => formatSpeed(taskStore.globalStat?.uploadS
     color: #fff;
     flex-shrink: 0;
   }
-
-  &.active .nav-badge {
-    background: var(--el-color-primary);
-  }
 }
 
 .sidebar-footer {

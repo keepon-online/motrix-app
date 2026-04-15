@@ -150,6 +150,25 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
+    /// Load config from the Tauri store, persisting defaults on first launch.
+    /// Consolidates the config-loading pattern used across multiple modules.
+    pub fn load_from_store(store: &tauri_plugin_store::Store<tauri::Wry>) -> Self {
+        if let Some(config_val) = store.get("config") {
+            serde_json::from_value(config_val.clone()).unwrap_or_else(|e| {
+                tracing::warn!("Failed to deserialize config, regenerating defaults: {}", e);
+                let default_config = Self::default();
+                store.set("config", serde_json::to_value(&default_config).expect("AppConfig serialization cannot fail"));
+                let _ = store.save();
+                default_config
+            })
+        } else {
+            let default_config = Self::default();
+            store.set("config", serde_json::to_value(&default_config).expect("AppConfig serialization cannot fail"));
+            let _ = store.save();
+            default_config
+        }
+    }
+
     /// Convert to aria2 command line arguments
     pub fn to_aria2_args(&self) -> Vec<String> {
         let mut args = vec![
@@ -166,7 +185,7 @@ impl AppConfig {
             format!("--seed-time={}", self.seed_time),
             format!("--user-agent={}", self.user_agent),
             format!("--rpc-listen-port={}", self.rpc_port),
-            format!("--rpc-secret={}", self.rpc_secret),
+            // Note: rpc-secret is passed via conf-path to avoid exposure in process list
             "--enable-rpc=true".to_string(),
             "--rpc-listen-all=false".to_string(),
             "--rpc-allow-origin-all=true".to_string(),
@@ -189,6 +208,7 @@ impl AppConfig {
             format!("--bt-remove-unselected-file={}", self.bt_remove_unselected_file),
             format!("--bt-detach-seed-only={}", self.bt_detach_seed_only),
             format!("--follow-metalink={}", self.follow_metalink),
+            format!("--enable-upnp={}", self.enable_upnp),
         ];
 
         // Add proxy settings if enabled

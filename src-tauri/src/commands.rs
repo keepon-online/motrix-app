@@ -12,21 +12,7 @@ use tauri_plugin_store::StoreExt;
 #[tauri::command]
 pub async fn get_app_config(app: tauri::AppHandle) -> Result<AppConfig> {
     let store = app.store("config.json")?;
-
-    // Try to load from store, or use defaults (persist to ensure rpc_secret consistency)
-    let config: AppConfig = if let Some(data) = store.get("config") {
-        serde_json::from_value(data.clone()).unwrap_or_else(|_| {
-            let default_config = AppConfig::default();
-            store.set("config", serde_json::to_value(&default_config).unwrap());
-            let _ = store.save();
-            default_config
-        })
-    } else {
-        let default_config = AppConfig::default();
-        store.set("config", serde_json::to_value(&default_config).unwrap());
-        let _ = store.save();
-        default_config
-    };
+    let config = AppConfig::load_from_store(&store);
 
     Ok(config)
 }
@@ -319,20 +305,18 @@ pub async fn delete_task_files(app: tauri::AppHandle, file_paths: Vec<String>) -
     // Get download directory from config for path validation
     let download_dir = {
         let store = app.store("config.json")?;
-        let config: AppConfig = if let Some(data) = store.get("config") {
-            serde_json::from_value(data.clone()).unwrap_or_default()
-        } else {
-            AppConfig::default()
-        };
-        config.download_dir
+        AppConfig::load_from_store(&store).download_dir
     };
+
+    // Canonicalize download directory once; fail if the dir doesn't exist yet
+    let dir_canonical = download_dir.canonicalize()
+        .map_err(|e| Error::Custom(format!("Download directory {:?} is not accessible: {}", download_dir, e)))?;
 
     for path in &file_paths {
         let p = std::path::Path::new(path);
         // Resolve to canonical path to prevent path traversal
         let canonical = p.canonicalize()
             .map_err(|e| Error::Custom(format!("Invalid path {}: {}", path, e)))?;
-        let dir_canonical = download_dir.canonicalize().unwrap_or(download_dir.clone());
 
         if !canonical.starts_with(&dir_canonical) {
             return Err(Error::Custom(format!("Path {} is outside download directory", path)));

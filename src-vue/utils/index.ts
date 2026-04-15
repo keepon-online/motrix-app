@@ -107,3 +107,59 @@ export function decodeThunderUrl(url: string): string {
     return url
   }
 }
+
+/**
+ * Check if a string is a downloadable URL
+ */
+export function isUrl(text: string): boolean {
+  return /^(https?|ftp|magnet|thunder):\/\/\S/i.test(text.trim())
+}
+
+/**
+ * Map task status to localized label
+ */
+export type TaskStatus = 'active' | 'waiting' | 'paused' | 'error' | 'complete' | 'removed'
+
+export function getTaskStatusText(status: TaskStatus, t: (key: string) => string): string {
+  const statusMap: Record<string, string> = {
+    active: t('task.downloading'),
+    waiting: t('task.waiting'),
+    paused: t('task.paused'),
+    error: t('task.error'),
+    complete: t('task.completed'),
+    removed: t('task.removed'),
+  }
+  return statusMap[status] || status
+}
+
+/**
+ * Shared task action helpers (open file, show in folder, copy link)
+ */
+import { invoke } from '@tauri-apps/api/core'
+import { ElMessage } from 'element-plus'
+
+export async function openFile(path: string) {
+  try {
+    await invoke('open_file', { path })
+  } catch (e) {
+    ElMessage.warning(String(e))
+  }
+}
+
+export async function showInFolder(path: string) {
+  try {
+    await invoke('show_in_folder', { path })
+  } catch (e) {
+    ElMessage.warning(String(e))
+  }
+}
+
+export async function copyLink(url: string) {
+  try {
+    await navigator.clipboard.writeText(url)
+  } catch {
+    // Fallback for Tauri
+    const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
+    await writeText(url)
+  }
+}

@@ -7,7 +7,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { readText } from '@tauri-apps/plugin-clipboard-manager'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage } from 'element-plus'
-import { formatBytes, decodeThunderUrl } from '@/utils'
+import { formatBytes, decodeThunderUrl, isUrl } from '@/utils'
 
 interface TorrentFileInfo {
   index: number
@@ -55,12 +55,23 @@ const authorization = ref('')
 
 const canSubmit = computed(() => {
   if (activeTab.value === 'uri') {
-    return uriInput.value.trim().length > 0
+    return uriLines.value.some((l) => l.valid)
   }
   if (activeTab.value === 'metalink') {
     return metalinkFilePath.value !== null
   }
   return torrentFile.value !== null
+})
+
+/** Per-line URL validation for visual feedback */
+const uriLines = computed(() => {
+  const lines = uriInput.value.split('\n')
+  return lines.map((line) => {
+    const trimmed = line.trim()
+    if (!trimmed) return { text: line, trimmed, valid: false, empty: true }
+    const decoded = decodeThunderUrl(trimmed)
+    return { text: line, trimmed: decoded, valid: isUrl(decoded), empty: false }
+  })
 })
 
 const allFilesSelected = computed(() => {
@@ -88,10 +99,6 @@ watch(visible, async (val) => {
     }
   }
 })
-
-function isUrl(text: string): boolean {
-  return /^(https?|ftp|magnet|thunder):\/?\/?\S/i.test(text)
-}
 
 async function selectTorrent() {
   const selected = await open({
@@ -185,15 +192,21 @@ async function submit() {
 
   try {
     if (activeTab.value === 'uri') {
-      const uris = uriInput.value
-        .split('\n')
-        .map((u) => u.trim())
-        .filter((u) => u.length > 0)
-        .map((u) => decodeThunderUrl(u))
+      const validUris = uriLines.value
+        .filter((l) => l.valid)
+        .map((l) => l.trimmed)
 
-      if (uris.length === 0) return
+      if (validUris.length === 0) {
+        ElMessage.warning(t('dialog.urlPlaceholder'))
+        return
+      }
 
-      for (const uri of uris) {
+      const invalidCount = uriLines.value.filter((l) => !l.empty && !l.valid).length
+      if (invalidCount > 0) {
+        ElMessage.warning(`${invalidCount} invalid URL(s) skipped`)
+      }
+
+      for (const uri of validUris) {
         await taskStore.addUri([uri], options)
       }
     } else if (activeTab.value === 'metalink' && metalinkFilePath.value) {
@@ -239,6 +252,18 @@ function resetForm() {
 function handleClose() {
   resetForm()
 }
+
+/** Handle paste: auto-detect URLs in pasted content */
+function onPaste(e: ClipboardEvent) {
+  const text = e.clipboardData?.getData('text')
+  if (!text) return
+
+  // If pasted content contains multiple lines, auto-populate
+  const lines = text.split(/[\r\n]+/).filter((l) => l.trim())
+  if (lines.length > 1) {
+    // Let default paste happen — the v-model binding handles it
+  }
+}
 </script>
 
 <template>
@@ -251,12 +276,27 @@ function handleClose() {
   >
     <el-tabs v-model="activeTab">
       <el-tab-pane :label="t('dialog.url')" name="uri">
-        <el-input
-          v-model="uriInput"
-          type="textarea"
-          :rows="5"
-          :placeholder="t('dialog.urlPlaceholder')"
-        />
+        <div class="uri-input-wrapper">
+          <el-input
+            v-model="uriInput"
+            type="textarea"
+            :rows="5"
+            :placeholder="t('dialog.urlPlaceholder')"
+            @paste="onPaste"
+          />
+          <div v-if="uriLines.some(l => !l.empty && !l.valid)" class="uri-validation">
+            <div
+              v-for="(line, i) in uriLines"
+              :key="i"
+              class="uri-line-status"
+              :class="{ invalid: !line.empty && !line.valid }"
+            >
+              <span v-if="!line.empty && !line.valid" class="uri-error" :title="line.trimmed">
+                Invalid URL: {{ line.text.slice(0, 60) }}{{ line.text.length > 60 ? '...' : '' }}
+              </span>
+            </div>
+          </div>
+        </div>
       </el-tab-pane>
 
       <el-tab-pane :label="t('dialog.torrent')" name="torrent">
@@ -435,5 +475,26 @@ function handleClose() {
   &:hover {
     color: var(--el-color-primary);
   }
+}
+
+.uri-input-wrapper {
+  position: relative;
+}
+
+.uri-validation {
+  margin-top: 4px;
+}
+
+.uri-line-status {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.uri-error {
+  color: var(--el-color-danger);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

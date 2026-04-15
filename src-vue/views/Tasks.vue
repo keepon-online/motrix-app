@@ -29,6 +29,7 @@ if (showAddDialog) {
 }
 let currentInterval = 1000
 let lastSelectedIndex = -1
+let visibilityHandler: (() => void) | null = null
 
 const pageTitle = computed(() => {
   const status = route.params.status as string
@@ -75,11 +76,27 @@ onMounted(() => {
   fetchTasks()
   taskStore.fetchGlobalStat()
   setupInterval()
+
+  // Pause polling when the page is hidden, resume with immediate refresh when visible
+  visibilityHandler = () => {
+    if (document.visibilityState === 'visible') {
+      fetchTasks()
+      taskStore.fetchGlobalStat()
+      setupInterval()
+    } else if (refreshInterval) {
+      clearInterval(refreshInterval)
+      refreshInterval = null
+    }
+  }
+  document.addEventListener('visibilitychange', visibilityHandler)
 })
 
 onUnmounted(() => {
   if (refreshInterval) {
     clearInterval(refreshInterval)
+  }
+  if (visibilityHandler) {
+    document.removeEventListener('visibilitychange', visibilityHandler)
   }
 })
 
@@ -117,7 +134,7 @@ function handleKeydown(e: KeyboardEvent) {
     taskStore.hideTaskDetail()
   }
   // Delete: Remove selected
-  if (e.key === 'Delete' && taskStore.selectedGids.length > 0) {
+  if (e.key === 'Delete' && taskStore.selectedGids.size > 0) {
     confirmRemoveSelected()
   }
 }
@@ -148,7 +165,7 @@ async function confirmRemoveTask(gid: string) {
 
 // Confirm remove selected tasks
 async function confirmRemoveSelected() {
-  const count = taskStore.selectedGids.length
+  const count = taskStore.selectedGids.size
   if (count === 0) return
   const deleteFiles = ref(false)
   try {
@@ -249,7 +266,7 @@ onUnmounted(() => {
           v-for="(task, index) in taskStore.filteredTasks"
           :key="task.gid"
           :task="task"
-          :selected="taskStore.selectedGids.includes(task.gid)"
+          :selected="taskStore.selectedGids.has(task.gid)"
           @click="(e: MouseEvent) => handleTaskClick(e, task.gid, index)"
           @select="taskStore.toggleSelectTask(task.gid)"
           @pause="taskStore.pauseTask(task.gid)"

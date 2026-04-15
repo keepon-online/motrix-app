@@ -2,10 +2,8 @@
 import type { Task } from '@/types'
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { invoke } from '@tauri-apps/api/core'
-import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { ElMessage } from 'element-plus'
-import { formatBytes, formatSpeed, formatDuration, calcProgress, calcRemainingTime, getTaskName } from '@/utils'
+import { formatBytes, formatSpeed, formatDuration, calcProgress, calcRemainingTime, getTaskName, getTaskStatusText, openFile as openFileUtil, showInFolder as showInFolderUtil, copyLink as copyLinkUtil } from '@/utils'
 
 const { t } = useI18n()
 
@@ -92,18 +90,10 @@ const statusClass = computed(() => {
 })
 
 const statusText = computed(() => {
-  const statusMap: Record<string, string> = {
-    active: t('task.downloading'),
-    waiting: t('task.waiting'),
-    paused: t('task.paused'),
-    complete: t('task.completed'),
-    error: t('task.error'),
-    removed: t('task.removed'),
-  }
   if (props.task.status === 'error' && props.task.errorMessage) {
     return `${t('task.error')}: ${props.task.errorMessage}`
   }
-  return statusMap[props.task.status] || props.task.status
+  return getTaskStatusText(props.task.status, t)
 })
 
 const isActive = computed(() => props.task.status === 'active')
@@ -126,7 +116,7 @@ const taskUrl = computed(() => {
 async function openFile() {
   if (!firstFilePath.value) return
   try {
-    await invoke('open_file', { path: firstFilePath.value })
+    await openFileUtil(firstFilePath.value)
   } catch (error) {
     ElMessage.error(t('task.failedOpenFile'))
   }
@@ -136,7 +126,7 @@ async function showInFolder() {
   const path = firstFilePath.value || props.task.dir
   if (!path) return
   try {
-    await invoke('show_in_folder', { path })
+    await showInFolderUtil(path)
   } catch (error) {
     ElMessage.error(t('task.failedOpenFolder'))
   }
@@ -145,7 +135,7 @@ async function showInFolder() {
 async function copyLink() {
   if (!taskUrl.value) return
   try {
-    await writeText(taskUrl.value)
+    await copyLinkUtil(taskUrl.value)
     ElMessage.success(t('task.linkCopied'))
   } catch (error) {
     ElMessage.error(t('task.failedCopyLink'))

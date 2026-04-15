@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, watch, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { invoke } from '@tauri-apps/api/core'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useTaskStore } from '@/stores/task'
-import { formatBytes, formatSpeed, formatDuration, calcProgress, calcRemainingTime, getTaskName, isBtTask } from '@/utils'
+import { formatBytes, formatSpeed, formatDuration, calcProgress, calcRemainingTime, getTaskName, isBtTask, getTaskStatusText, openFile as openFileUtil, showInFolder as showInFolderUtil, copyLink as copyLinkUtil } from '@/utils'
 import TaskFiles from './TaskFiles.vue'
 import TaskPeers from './TaskPeers.vue'
 import TaskTrackers from './TaskTrackers.vue'
@@ -81,15 +80,7 @@ const btMode = computed(() => task.value?.bittorrent?.mode || '')
 
 const statusText = computed(() => {
   if (!task.value) return ''
-  const statusMap: Record<string, string> = {
-    active: t('task.downloading'),
-    waiting: t('task.waiting'),
-    paused: t('task.paused'),
-    complete: t('task.completed'),
-    error: t('task.error'),
-    removed: t('task.removed'),
-  }
-  return statusMap[task.value.status] || task.value.status
+  return getTaskStatusText(task.value.status as import('@/utils').TaskStatus, t)
 })
 
 const statusType = computed((): 'info' | 'success' | 'warning' | 'primary' | 'danger' => {
@@ -148,7 +139,7 @@ async function handleRemove() {
 async function handleOpenFile() {
   if (!firstFilePath.value) return
   try {
-    await invoke('open_file', { path: firstFilePath.value })
+    await openFileUtil(firstFilePath.value)
   } catch {
     ElMessage.error(t('task.failedOpenFile'))
   }
@@ -158,7 +149,7 @@ async function handleShowInFolder() {
   const path = firstFilePath.value || task.value?.dir
   if (!path) return
   try {
-    await invoke('show_in_folder', { path })
+    await showInFolderUtil(path)
   } catch {
     ElMessage.error(t('task.failedOpenFolder'))
   }
@@ -167,8 +158,7 @@ async function handleShowInFolder() {
 async function handleCopyLink() {
   if (!taskUrl.value) return
   try {
-    const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
-    await writeText(taskUrl.value)
+    await copyLinkUtil(taskUrl.value)
     ElMessage.success(t('task.linkCopied'))
   } catch {
     ElMessage.error(t('task.failedCopyLink'))

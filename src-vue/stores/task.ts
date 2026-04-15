@@ -11,11 +11,12 @@ export const useTaskStore = defineStore('task', () => {
   // State
   const tasks = ref<Task[]>([])
   const currentListType = ref<TaskListType>('active')
-  const selectedGids = ref<string[]>([])
+  const selectedGids = ref<Set<string>>(new Set())
   const currentTask = ref<Task | null>(null)
   const detailVisible = ref(false)
   const globalStat = ref<GlobalStat | null>(null)
   const loading = ref(false)
+  const fetching = ref(false)
   const searchQuery = ref('')
   const sortField = ref<SortField>('default')
   const sortOrder = ref<SortOrder>('asc')
@@ -77,16 +78,23 @@ export const useTaskStore = defineStore('task', () => {
   async function fetchTasks(type?: TaskListType) {
     const listType = type ?? currentListType.value
 
+    // Loading guard: skip if previous fetch still in-flight
+    if (fetching.value) return
+    fetching.value = true
+
     try {
       const result = await invoke<Task[]>('get_task_list', { taskType: listType })
       tasks.value = result
       currentListType.value = listType
 
-      // Update selected gids (remove non-existent)
+      // Prune selected gids that no longer exist
       const gids = new Set(result.map((t) => t.gid))
-      selectedGids.value = selectedGids.value.filter((gid) => gids.has(gid))
+      const pruned = new Set([...selectedGids.value].filter((gid) => gids.has(gid)))
+      selectedGids.value = pruned
     } catch (error) {
       console.error('Failed to fetch tasks:', error)
+    } finally {
+      fetching.value = false
     }
   }
 
@@ -211,17 +219,17 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   function selectTask(gid: string) {
-    if (!selectedGids.value.includes(gid)) {
-      selectedGids.value.push(gid)
-    }
+    selectedGids.value = new Set([...selectedGids.value, gid])
   }
 
   function deselectTask(gid: string) {
-    selectedGids.value = selectedGids.value.filter((g) => g !== gid)
+    const next = new Set(selectedGids.value)
+    next.delete(gid)
+    selectedGids.value = next
   }
 
   function toggleSelectTask(gid: string) {
-    if (selectedGids.value.includes(gid)) {
+    if (selectedGids.value.has(gid)) {
       deselectTask(gid)
     } else {
       selectTask(gid)
@@ -229,11 +237,11 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   function selectAllTasks() {
-    selectedGids.value = tasks.value.map((t) => t.gid)
+    selectedGids.value = new Set(tasks.value.map((t) => t.gid))
   }
 
   function clearSelection() {
-    selectedGids.value = []
+    selectedGids.value = new Set()
   }
 
   // Batch operations
@@ -354,6 +362,7 @@ export const useTaskStore = defineStore('task', () => {
     detailVisible,
     globalStat,
     loading,
+    fetching,
     searchQuery,
     sortField,
     sortOrder,

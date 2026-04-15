@@ -67,7 +67,7 @@ mod platform {
             );
 
             if result == 0 {
-                *ASSERTION_ID.lock().unwrap() = assertion_id;
+                *ASSERTION_ID.lock().map_err(|e| format!("Lock poisoned: {}", e))? = assertion_id;
                 Ok(())
             } else {
                 Err(format!("IOPMAssertionCreateWithName failed: {}", result))
@@ -77,10 +77,11 @@ mod platform {
 
     pub fn allow_sleep() -> Result<(), String> {
         unsafe {
-            let id = *ASSERTION_ID.lock().unwrap();
+            let mut guard = ASSERTION_ID.lock().map_err(|e| format!("Lock poisoned: {}", e))?;
+            let id = *guard;
             if id != 0 {
                 IOPMAssertionRelease(id);
-                *ASSERTION_ID.lock().unwrap() = 0;
+                *guard = 0;
             }
             Ok(())
         }
@@ -149,7 +150,7 @@ mod platform {
                 .and_then(|l| l.split_whitespace().last())
                 .and_then(|s| s.parse::<u32>().ok())
             {
-                *INHIBIT_COOKIE.lock().unwrap() = Some(cookie);
+                *INHIBIT_COOKIE.lock().map_err(|e| format!("Lock poisoned: {}", e))? = Some(cookie);
             }
             Ok(())
         } else {
@@ -160,7 +161,7 @@ mod platform {
     }
 
     pub fn allow_sleep() -> Result<(), String> {
-        let cookie = INHIBIT_COOKIE.lock().unwrap().take();
+        let cookie = INHIBIT_COOKIE.lock().map_err(|e| format!("Lock poisoned: {}", e))?.take();
         if let Some(cookie) = cookie {
             let _ = std::process::Command::new("dbus-send")
                 .args([

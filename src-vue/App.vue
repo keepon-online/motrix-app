@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import { onMounted, ref, provide } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useTheme } from '@/composables/useTheme'
 import { useAria2Events } from '@/composables/useAria2Events'
 import { useUpdater } from '@/composables/useUpdater'
+import { useConnectionStatus } from '@/composables/useConnectionStatus'
 import { listen } from '@tauri-apps/api/event'
 import TitleBar from '@/components/TitleBar.vue'
 import Sidebar from '@/components/Sidebar.vue'
 import DragDrop from '@/components/DragDrop.vue'
 
+const { t } = useI18n()
 const appStore = useAppStore()
 const { initTheme } = useTheme()
+const { status: connectionStatus, isDisconnected } = useConnectionStatus()
 
 // Global state for pending URLs to add (used by AddTaskDialog)
 const pendingUrls = ref<string[]>([])
@@ -76,6 +80,14 @@ onMounted(async () => {
 <template>
   <div class="app-container" :class="{ 'is-dark': appStore.isDark }">
     <TitleBar />
+    <transition name="slide-down">
+      <div v-if="isDisconnected" class="connection-banner" :class="connectionStatus">
+        <el-icon><WarningFilled /></el-icon>
+        <span>{{ connectionStatus === 'terminated'
+          ? t('connection.engineTerminated')
+          : t('connection.reconnecting') }}</span>
+      </div>
+    </transition>
     <div class="app-main">
       <Sidebar />
       <main class="app-content">
@@ -120,5 +132,37 @@ onMounted(async () => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.connection-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 16px;
+  font-size: 13px;
+  background: var(--el-color-warning-light-9);
+  color: var(--el-color-warning-dark-2);
+  border-bottom: 1px solid var(--el-color-warning-light-7);
+  flex-shrink: 0;
+
+  &.terminated {
+    background: var(--el-color-danger-light-9);
+    color: var(--el-color-danger-dark-2);
+    border-bottom-color: var(--el-color-danger-light-7);
+  }
+}
+
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-down-enter-from,
+.slide-down-leave-to {
+  max-height: 0;
+  padding: 0 16px;
+  opacity: 0;
+  overflow: hidden;
 }
 </style>

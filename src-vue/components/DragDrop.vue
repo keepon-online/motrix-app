@@ -4,16 +4,12 @@ import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
 import { useAppStore } from '@/stores/app'
 import { ElMessage } from 'element-plus'
-import { decodeThunderUrl } from '@/utils'
+import { decodeThunderUrl, isUrl } from '@/utils'
 
 const { t } = useI18n()
 const taskStore = useTaskStore()
 const appStore = useAppStore()
 const isDragging = ref(false)
-
-function isUrl(text: string): boolean {
-  return /^(https?|ftp|magnet|thunder):\/?/i.test(text.trim())
-}
 
 function isTorrentFile(name: string): boolean {
   return name.toLowerCase().endsWith('.torrent')

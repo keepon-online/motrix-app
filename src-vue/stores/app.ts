@@ -4,6 +4,15 @@ import type { AppConfig } from '@/types'
 import { invoke } from '@tauri-apps/api/core'
 import { i18n } from '@/main'
 
+/** Debounce helper: delays execution until `wait` ms after the last call */
+function debounce<T extends (...args: unknown[]) => void>(fn: T, wait: number): T {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  return ((...args: unknown[]) => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => fn(...args), wait)
+  }) as T
+}
+
 export const useAppStore = defineStore('app', () => {
   // State
   const config = ref<AppConfig | null>(null)
@@ -79,51 +88,83 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
+  /** Map of frontend config keys to aria2 global option names */
+  const aria2Keys: Record<string, string> = {
+    maxConcurrentDownloads: 'max-concurrent-downloads',
+    maxDownloadLimit: 'max-download-limit',
+    maxUploadLimit: 'max-upload-limit',
+    maxOverallDownloadLimit: 'max-overall-download-limit',
+    maxOverallUploadLimit: 'max-overall-upload-limit',
+    userAgent: 'user-agent',
+    btForceEncryption: 'bt-force-encryption',
+    btRequireCrypto: 'bt-require-crypto',
+    followMetalink: 'follow-metalink',
+    btSaveMetadata: 'bt-save-metadata',
+    btLoadSavedMetadata: 'bt-load-saved-metadata',
+    btRemoveUnselectedFile: 'bt-remove-unselected-file',
+    btDetachSeedOnly: 'bt-detach-seed-only',
+    seedRatio: 'seed-ratio',
+    seedTime: 'seed-time',
+    btTracker: 'bt-tracker',
+    enableUpnp: 'enable-upnp',
+    allowOverwrite: 'allow-overwrite',
+    autoFileRenaming: 'auto-file-renaming',
+    continueDownload: 'continue-download',
+    maxConnectionPerServer: 'max-connection-per-server',
+    split: 'split',
+    minSplitSize: 'min-split-size',
+  }
+
+  /** Sync relevant config keys to aria2 engine at runtime */
+  async function syncToAria2(newConfig: Partial<AppConfig>) {
+    const engineOptions: Record<string, string> = {}
+    for (const [configKey, aria2Key] of Object.entries(aria2Keys)) {
+      if (configKey in newConfig) {
+        engineOptions[aria2Key] = String((newConfig as Record<string, unknown>)[configKey])
+      }
+    }
+
+    // Handle proxy as a composed option
+    if ('proxyEnabled' in newConfig || 'proxyHost' in newConfig || 'proxyPort' in newConfig
+      || 'proxyType' in newConfig || 'proxyUsername' in newConfig) {
+      const c = config.value
+      if (c && c.proxyEnabled && c.proxyHost) {
+        const auth = c.proxyUsername ? `${c.proxyUsername}:${c.proxyPassword}@` : ''
+        engineOptions['all-proxy'] = `${c.proxyType}://${auth}${c.proxyHost}:${c.proxyPort}`
+      } else {
+        engineOptions['all-proxy'] = ''
+      }
+    }
+
+    if ('noProxy' in newConfig && config.value) {
+      engineOptions['no-proxy'] = config.value.noProxy
+    }
+
+    if (Object.keys(engineOptions).length > 0) {
+      try {
+        await invoke('change_global_option', { options: engineOptions })
+      } catch (e) {
+        console.warn('Failed to sync options to aria2:', e)
+      }
+    }
+  }
+
+  /** Debounced persist + sync — coalesces rapid changes (e.g. spinner clicks) */
+  const debouncedSave = debounce(async (updated: AppConfig, newConfig: Partial<AppConfig>) => {
+    try {
+      await invoke('save_app_config', { config: updated })
+      await syncToAria2(newConfig)
+    } catch (error) {
+      console.error('Failed to save config:', error)
+    }
+  }, 500)
+
   async function saveConfig(newConfig: Partial<AppConfig>) {
     if (!config.value) return
 
     const updated = { ...config.value, ...newConfig }
-    try {
-      await invoke('save_app_config', { config: updated })
-      config.value = updated
-
-      // Sync download-related options to aria2 engine in real-time
-      // Only global options that can be changed at runtime via aria2 changeGlobalOption
-      // Note: split, max-connection-per-server are per-task options, not global
-      const aria2Keys: Record<string, string> = {
-        maxConcurrentDownloads: 'max-concurrent-downloads',
-        maxDownloadLimit: 'max-download-limit',
-        maxUploadLimit: 'max-upload-limit',
-        maxOverallDownloadLimit: 'max-overall-download-limit',
-        maxOverallUploadLimit: 'max-overall-upload-limit',
-        userAgent: 'user-agent',
-        btForceEncryption: 'bt-force-encryption',
-        btRequireCrypto: 'bt-require-crypto',
-        followMetalink: 'follow-metalink',
-        btSaveMetadata: 'bt-save-metadata',
-        btLoadSavedMetadata: 'bt-load-saved-metadata',
-        btRemoveUnselectedFile: 'bt-remove-unselected-file',
-        btDetachSeedOnly: 'bt-detach-seed-only',
-      }
-
-      const engineOptions: Record<string, string> = {}
-      for (const [configKey, aria2Key] of Object.entries(aria2Keys)) {
-        if (configKey in newConfig) {
-          engineOptions[aria2Key] = String((newConfig as Record<string, unknown>)[configKey])
-        }
-      }
-
-      if (Object.keys(engineOptions).length > 0) {
-        try {
-          await invoke('change_global_option', { options: engineOptions })
-        } catch (e) {
-          console.warn('Failed to sync options to aria2:', e)
-        }
-      }
-    } catch (error) {
-      console.error('Failed to save config:', error)
-      throw error
-    }
+    config.value = updated
+    debouncedSave(updated, newConfig)
   }
 
   async function setTheme(theme: 'auto' | 'light' | 'dark') {

@@ -7,7 +7,7 @@ import { useAppStore } from '@/stores/app'
 import { ElNotification } from 'element-plus'
 import { getTaskName } from '@/utils'
 
-export interface Aria2Event {
+interface Aria2Event {
   eventType: 'download_start' | 'download_pause' | 'download_stop' | 'download_complete' | 'download_error' | 'bt_download_complete'
   gid: string
 }
@@ -144,8 +144,4 @@ export function useAria2Events() {
       unlistenConnection()
     }
   })
-
-  return {
-    handleAria2Event,
-  }
 }

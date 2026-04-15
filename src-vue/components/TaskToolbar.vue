@@ -6,8 +6,8 @@ import { useTaskStore } from '@/stores/task'
 const { t } = useI18n()
 const taskStore = useTaskStore()
 
-const hasSelection = computed(() => taskStore.selectedGids.length > 0)
-const selectionCount = computed(() => taskStore.selectedGids.length)
+const hasSelection = computed(() => taskStore.selectedGids.size > 0)
+const selectionCount = computed(() => taskStore.selectedGids.size)
 const totalCount = computed(() => taskStore.tasks.length)
 const isAllSelected = computed(() =>
   totalCount.value > 0 && selectionCount.value === totalCount.value

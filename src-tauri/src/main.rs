@@ -58,8 +58,7 @@ fn main() {
                 let start_hidden = app.handle()
                     .store("config.json")
                     .ok()
-                    .and_then(|store| store.get("config"))
-                    .and_then(|v| v.get("startHidden").and_then(|v| v.as_bool()))
+                    .map(|store| motrix_lib::config::AppConfig::load_from_store(&store).start_hidden)
                     .unwrap_or(false);
 
                 if start_hidden {
@@ -97,8 +96,7 @@ fn main() {
                     let should_resume = app_handle
                         .store("config.json")
                         .ok()
-                        .and_then(|store| store.get("config"))
-                        .and_then(|v| v.get("resumeAllWhenAppLaunched").and_then(|v| v.as_bool()))
+                        .map(|store| motrix_lib::config::AppConfig::load_from_store(&store).resume_all_when_app_launched)
                         .unwrap_or(true);
 
                     if should_resume {
@@ -158,8 +156,7 @@ fn main() {
                 let hide_on_close = window.app_handle()
                     .store("config.json")
                     .ok()
-                    .and_then(|store| store.get("config"))
-                    .and_then(|config_val| config_val.get("hideOnClose").and_then(|v| v.as_bool()))
+                    .map(|store| motrix_lib::config::AppConfig::load_from_store(&store).hide_on_close)
                     .unwrap_or(true);
 
                 if hide_on_close {
