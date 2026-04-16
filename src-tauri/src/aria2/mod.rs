@@ -155,6 +155,7 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
 
     INITIALIZING.store(false, Ordering::SeqCst);
     tracing::info!("Aria2 engine initialized on port {}", port);
+    let _ = app.emit("aria2-ready", ());
     Ok(())
 }
 

@@ -4,6 +4,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import { useTaskStore } from '@/stores/task'
 import { useAppStore } from '@/stores/app'
+import { useConnectionStatus } from '@/composables/useConnectionStatus'
 import { ElNotification } from 'element-plus'
 import { getTaskName } from '@/utils'
 
@@ -16,6 +17,7 @@ export function useAria2Events() {
   const { t } = useI18n()
   const taskStore = useTaskStore()
   const appStore = useAppStore()
+  const { engineReady } = useConnectionStatus()
   let unlisten: UnlistenFn | null = null
 
   async function sendSystemNotification(title: string, body: string) {
@@ -45,6 +47,9 @@ export function useAria2Events() {
   }
 
   async function handleAria2Event(event: Aria2Event) {
+    // Ignore events if the engine hasn't finished initializing yet
+    if (!engineReady.value) return
+
     switch (event.eventType) {
       case 'download_start':
         taskStore.fetchTasks('active')

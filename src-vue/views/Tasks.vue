@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch, h, inject, type Ref } fro
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
+import { useConnectionStatus } from '@/composables/useConnectionStatus'
 import { ElMessageBox, ElCheckbox } from 'element-plus'
 import { Search, SortUp, SortDown } from '@element-plus/icons-vue'
 import TaskItem from '@/components/TaskItem.vue'
@@ -13,6 +14,7 @@ import AddTaskDialog from '@/components/AddTaskDialog.vue'
 const { t } = useI18n()
 const route = useRoute()
 const taskStore = useTaskStore()
+const { engineReady } = useConnectionStatus()
 
 const addDialogVisible = ref(false)
 const showAddDialog = inject<Ref<boolean>>('showAddDialog')
@@ -73,16 +75,24 @@ function setupInterval() {
 }
 
 onMounted(() => {
-  fetchTasks()
-  taskStore.fetchGlobalStat()
-  setupInterval()
+  // Wait for aria2 engine to be ready before starting polling.
+  // The backend emits `aria2-ready` after init_engine succeeds.
+  const stopWatch = watch(engineReady, (ready) => {
+    if (!ready) return
+    stopWatch()
+    fetchTasks()
+    taskStore.fetchGlobalStat()
+    setupInterval()
+  }, { immediate: true })
 
   // Pause polling when the page is hidden, resume with immediate refresh when visible
   visibilityHandler = () => {
     if (document.visibilityState === 'visible') {
-      fetchTasks()
-      taskStore.fetchGlobalStat()
-      setupInterval()
+      if (engineReady.value) {
+        fetchTasks()
+        taskStore.fetchGlobalStat()
+        setupInterval()
+      }
     } else if (refreshInterval) {
       clearInterval(refreshInterval)
       refreshInterval = null
