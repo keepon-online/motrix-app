@@ -40,18 +40,18 @@ struct RpcRequest {
 impl Aria2Client {
     /// Check if the WebSocket connection is healthy
     pub fn is_healthy(&self) -> bool {
-        self.healthy.load(Ordering::Relaxed)
+        self.healthy.load(Ordering::Acquire)
     }
 
     /// Check if the client is still alive (not intentionally shut down)
     pub fn is_alive(&self) -> bool {
-        self.alive.load(Ordering::Relaxed)
+        self.alive.load(Ordering::Acquire)
     }
 
     /// Mark the client as intentionally shutting down.
     /// This prevents the reconnection loop from retrying.
     pub fn mark_shutdown(&self) {
-        self.alive.store(false, Ordering::Relaxed);
+        self.alive.store(false, Ordering::Release);
     }
 
     /// Create a new aria2 client connected to the given WebSocket URL
@@ -88,7 +88,7 @@ impl Aria2Client {
 
             loop {
                 // Check for intentional shutdown
-                if !task_alive.load(Ordering::Relaxed) {
+                if !task_alive.load(Ordering::Acquire) {
                     for (_, tx) in pending.drain() {
                         let _ = tx.send(Err(Error::Aria2Rpc("Engine shutting down".into())));
                     }
@@ -96,7 +96,7 @@ impl Aria2Client {
                 }
 
                 // --- Unhealthy: reconnection mode ---
-                if !task_healthy.load(Ordering::Relaxed) {
+                if !task_healthy.load(Ordering::Acquire) {
                     // Drain queued requests with errors (call() fast-fails, but some
                     // may have been queued before the unhealthy flag was set)
                     while let Ok(req) = rx.try_recv() {
@@ -109,7 +109,7 @@ impl Aria2Client {
                     tokio::select! {
                         _ = tokio::time::sleep(Duration::from_secs(3)) => {}
                         _ = tokio::time::sleep(Duration::from_millis(200)) => {
-                            if !task_alive.load(Ordering::Relaxed) { break; }
+                            if !task_alive.load(Ordering::Acquire) { break; }
                             continue;
                         }
                     }
@@ -119,7 +119,7 @@ impl Aria2Client {
                             let (new_write, new_read) = new_stream.split();
                             write = new_write;
                             read = new_read;
-                            task_healthy.store(true, Ordering::Relaxed);
+                            task_healthy.store(true, Ordering::Release);
                             last_activity = std::time::Instant::now();
                             tracing::info!("WebSocket reconnected successfully");
                             let _ = event_app_handle.emit("aria2-connection", CONN_CONNECTED);
@@ -172,7 +172,7 @@ impl Aria2Client {
                             }
                             Err(e) => {
                                 tracing::error!("WebSocket error: {}, entering reconnection mode", e);
-                                task_healthy.store(false, Ordering::Relaxed);
+                                task_healthy.store(false, Ordering::Release);
                                 let _ = event_app_handle.emit("aria2-connection", CONN_DISCONNECTED);
                                 for (_, tx) in pending.drain() {
                                     let _ = tx.send(Err(Error::Aria2Rpc("WebSocket disconnected".into())));
@@ -193,7 +193,7 @@ impl Aria2Client {
                             });
                             if let Err(e) = write.send(Message::Text(msg.to_string())).await {
                                 tracing::warn!("Heartbeat failed: {}, marking unhealthy", e);
-                                task_healthy.store(false, Ordering::Relaxed);
+                                task_healthy.store(false, Ordering::Release);
                                 let _ = event_app_handle.emit("aria2-connection", CONN_DISCONNECTED);
                                 for (_, tx) in pending.drain() {
                                     let _ = tx.send(Err(Error::Aria2Rpc("Heartbeat failed".into())));
@@ -220,12 +220,12 @@ impl Aria2Client {
 
     /// Call an aria2 RPC method. Fast-fails if the connection is unhealthy.
     pub async fn call(&self, method: &str, params: Vec<Value>) -> Result<Value> {
-        if !self.healthy.load(Ordering::Relaxed) {
+        if !self.healthy.load(Ordering::Acquire) {
             return Err(Error::Aria2Rpc(
                 "Download engine disconnected, reconnecting...".into(),
             ));
         }
-        if !self.alive.load(Ordering::Relaxed) {
+        if !self.alive.load(Ordering::Acquire) {
             return Err(Error::Aria2Rpc("Download engine is shutting down".into()));
         }
 

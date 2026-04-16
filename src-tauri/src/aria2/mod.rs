@@ -26,6 +26,9 @@ static ARIA2_PROCESS: Mutex<Option<tauri_plugin_shell::process::CommandChild>> =
 /// True when the engine is being intentionally shut down
 static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
 
+/// True while `init_engine` is running (prevents concurrent initialization)
+static INITIALIZING: AtomicBool = AtomicBool::new(false);
+
 /// Kill any orphaned aria2c processes listening on the given port
 fn kill_orphaned_aria2c(port: u16) {
     #[cfg(target_os = "windows")]
@@ -79,9 +82,14 @@ pub(crate) async fn force_kill_process() {
     }
 }
 
-/// Graceful shutdown: try RPC shutdown first, then force kill as fallback
+/// Graceful shutdown: try RPC shutdown first, then force kill as fallback.
+/// Safe to call multiple times — subsequent calls return immediately.
 pub async fn shutdown_and_cleanup() {
-    SHUTTING_DOWN.store(true, Ordering::SeqCst);
+    // Swap returns the OLD value; if it was already true, another call is in progress
+    if SHUTTING_DOWN.swap(true, Ordering::SeqCst) {
+        tracing::debug!("Shutdown already in progress, skipping duplicate call");
+        return;
+    }
 
     if let Ok(client) = get_client().await {
         let _ = client.save_session().await;
@@ -105,6 +113,11 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
     use tauri_plugin_store::StoreExt;
     use crate::config::AppConfig;
 
+    // Re-entrancy guard: prevent concurrent initialization
+    if INITIALIZING.swap(true, Ordering::SeqCst) {
+        return Err(Error::Custom("Engine initialization already in progress".into()));
+    }
+
     SHUTTING_DOWN.store(false, Ordering::SeqCst);
 
     let store = app.store("config.json")?;
@@ -127,6 +140,9 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
             Err(e) => {
                 tracing::warn!("Aria2 connection attempt {}/10 failed: {}", attempt, e);
                 if attempt == 10 {
+                    // Clean up the child process we started — it's useless without a client
+                    force_kill_process().await;
+                    INITIALIZING.store(false, Ordering::SeqCst);
                     return Err(e);
                 }
             }
@@ -137,6 +153,7 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
     let mut guard = ARIA2_CLIENT.write().await;
     *guard = Some(client);
 
+    INITIALIZING.store(false, Ordering::SeqCst);
     tracing::info!("Aria2 engine initialized on port {}", port);
     Ok(())
 }
@@ -203,12 +220,18 @@ async fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig)
         while let Some(event) = rx.recv().await {
             match event {
                 tauri_plugin_shell::process::CommandEvent::Terminated(payload) => {
+                    // Use SeqCst to synchronize with shutdown_and_cleanup's swap
                     if SHUTTING_DOWN.load(Ordering::SeqCst) {
                         tracing::info!("Aria2 process terminated (intentional shutdown)");
                         return;
                     }
                     let code = payload.code.map(|c| c.to_string()).unwrap_or_else(|| "unknown".into());
                     tracing::warn!("Aria2 process terminated unexpectedly (exit code: {})", code);
+                    // Double-check after logging to avoid race with concurrent shutdown
+                    if SHUTTING_DOWN.load(Ordering::SeqCst) {
+                        tracing::info!("Shutdown started during termination handling, aborting notification");
+                        return;
+                    }
                     let _ = watchdog_app.emit("aria2-connection", "terminated");
                 }
                 tauri_plugin_shell::process::CommandEvent::Stderr(line) => {
