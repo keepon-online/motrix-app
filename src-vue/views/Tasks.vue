@@ -14,7 +14,7 @@ import AddTaskDialog from '@/components/AddTaskDialog.vue'
 const { t } = useI18n()
 const route = useRoute()
 const taskStore = useTaskStore()
-const { engineReady } = useConnectionStatus()
+const { engineReady, isDisconnected } = useConnectionStatus()
 
 const addDialogVisible = ref(false)
 const showAddDialog = inject<Ref<boolean>>('showAddDialog')
@@ -75,15 +75,25 @@ function setupInterval() {
 }
 
 onMounted(() => {
-  // Wait for aria2 engine to be ready before starting polling.
-  // The backend emits `aria2-ready` after init_engine succeeds.
-  const stopWatch = watch(engineReady, (ready) => {
-    if (!ready) return
-    stopWatch()
-    fetchTasks()
-    taskStore.fetchGlobalStat()
-    setupInterval()
+  // React to engine state changes: start polling when ready, stop when disconnected
+  watch(engineReady, (ready) => {
+    if (ready) {
+      fetchTasks()
+      taskStore.fetchGlobalStat()
+      setupInterval()
+    } else if (refreshInterval) {
+      clearInterval(refreshInterval)
+      refreshInterval = null
+    }
   }, { immediate: true })
+
+  // Also stop polling immediately when disconnected (even if engineReady hasn't reset yet)
+  watch(isDisconnected, (disconnected) => {
+    if (disconnected && refreshInterval) {
+      clearInterval(refreshInterval)
+      refreshInterval = null
+    }
+  })
 
   // Pause polling when the page is hidden, resume with immediate refresh when visible
   visibilityHandler = () => {

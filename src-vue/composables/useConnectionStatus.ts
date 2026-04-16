@@ -26,10 +26,15 @@ async function setupListeners() {
         case 'disconnected':
           status.value = 'disconnected'
           lastDisconnected.value = new Date()
+          engineReady.value = false
+          break
+        case 'reconnecting':
+          status.value = 'reconnecting'
           break
         case 'terminated':
           status.value = 'terminated'
           lastDisconnected.value = new Date()
+          engineReady.value = false
           break
         default:
           break

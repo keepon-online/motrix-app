@@ -137,11 +137,11 @@ pub async fn change_global_option(options: Value) -> Result<Value> {
     client.change_global_option(options).await
 }
 
-/// Shutdown aria2 engine
+/// Shutdown aria2 engine gracefully
 #[tauri::command]
-pub async fn shutdown_engine() -> Result<Value> {
-    let client = aria2::get_client().await?;
-    client.shutdown().await
+pub async fn shutdown_engine() -> Result<()> {
+    aria2::shutdown_and_cleanup().await;
+    Ok(())
 }
 
 /// Pause all active tasks

@@ -13,7 +13,7 @@ pub use events::{Aria2Event, Aria2EventType};
 
 use crate::{Error, Result};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{Mutex, RwLock};
 
@@ -28,6 +28,10 @@ static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
 
 /// True while `init_engine` is running (prevents concurrent initialization)
 static INITIALIZING: AtomicBool = AtomicBool::new(false);
+
+/// Crash restart counter — caps restart attempts to prevent infinite loops
+static RESTART_COUNT: AtomicU32 = AtomicU32::new(0);
+const MAX_RESTARTS: u32 = 3;
 
 /// Kill any orphaned aria2c processes listening on the given port
 fn kill_orphaned_aria2c(port: u16) {
@@ -118,7 +122,17 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
         return Err(Error::Custom("Engine initialization already in progress".into()));
     }
 
+    // RAII guard: ensures INITIALIZING is reset on ALL exit paths (including panic/drop)
+    struct InitGuard;
+    impl Drop for InitGuard {
+        fn drop(&mut self) {
+            INITIALIZING.store(false, Ordering::SeqCst);
+        }
+    }
+    let _init_guard = InitGuard;
+
     SHUTTING_DOWN.store(false, Ordering::SeqCst);
+    RESTART_COUNT.store(0, Ordering::SeqCst);
 
     let store = app.store("config.json")?;
     let config = AppConfig::load_from_store(&store);
@@ -142,7 +156,6 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
                 if attempt == 10 {
                     // Clean up the child process we started — it's useless without a client
                     force_kill_process().await;
-                    INITIALIZING.store(false, Ordering::SeqCst);
                     return Err(e);
                 }
             }
@@ -153,10 +166,10 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
     let mut guard = ARIA2_CLIENT.write().await;
     *guard = Some(client);
 
-    INITIALIZING.store(false, Ordering::SeqCst);
     tracing::info!("Aria2 engine initialized on port {}", port);
     let _ = app.emit("aria2-ready", ());
     Ok(())
+    // _init_guard dropped here → INITIALIZING reset to false
 }
 
 /// Start aria2 process and spawn a watchdog to detect unexpected termination
@@ -215,7 +228,7 @@ async fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig)
     let mut process_guard = ARIA2_PROCESS.lock().await;
     *process_guard = Some(child);
 
-    // Spawn process watchdog to detect unexpected termination
+    // Spawn process watchdog to detect unexpected termination and auto-restart
     let watchdog_app = app.clone();
     tokio::spawn(async move {
         while let Some(event) = rx.recv().await {
@@ -233,7 +246,43 @@ async fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig)
                         tracing::info!("Shutdown started during termination handling, aborting notification");
                         return;
                     }
-                    let _ = watchdog_app.emit("aria2-connection", "terminated");
+
+                    // Clear stale client so get_client() fails fast during restart
+                    {
+                        let mut guard = ARIA2_CLIENT.write().await;
+                        *guard = None;
+                    }
+
+                    let count = RESTART_COUNT.fetch_add(1, Ordering::SeqCst);
+                    if count >= MAX_RESTARTS {
+                        tracing::error!("Max restart attempts ({}) reached, giving up", MAX_RESTARTS);
+                        let _ = watchdog_app.emit("aria2-connection", "terminated");
+                        return;
+                    }
+
+                    tracing::info!("Auto-restarting engine (attempt {}/{})", count + 1, MAX_RESTARTS);
+                    let _ = watchdog_app.emit("aria2-connection", "reconnecting");
+
+                    // Exponential backoff: 2s, 4s, 8s
+                    let delay = std::time::Duration::from_secs(2u64.pow(count + 1));
+                    tokio::time::sleep(delay).await;
+
+                    if SHUTTING_DOWN.load(Ordering::SeqCst) { return; }
+
+                    match init_engine(&watchdog_app).await {
+                        Ok(()) => {
+                            RESTART_COUNT.store(0, Ordering::SeqCst);
+                            tracing::info!("Engine auto-restart succeeded");
+                        }
+                        Err(e) => {
+                            tracing::error!("Engine auto-restart failed: {}", e);
+                            // Emit terminated if this was the last attempt
+                            if RESTART_COUNT.load(Ordering::SeqCst) >= MAX_RESTARTS {
+                                let _ = watchdog_app.emit("aria2-connection", "terminated");
+                            }
+                        }
+                    }
+                    return;
                 }
                 tauri_plugin_shell::process::CommandEvent::Stderr(line) => {
                     let text = String::from_utf8_lossy(&line);
