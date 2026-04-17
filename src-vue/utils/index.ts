@@ -115,11 +115,11 @@ export function isUrl(text: string): boolean {
   return /^(https?|ftp|magnet|thunder):\/\/\S/i.test(text.trim())
 }
 
+import type { TaskStatus } from '@/types'
+
 /**
  * Map task status to localized label
  */
-export type TaskStatus = 'active' | 'waiting' | 'paused' | 'error' | 'complete' | 'removed'
-
 export function getTaskStatusText(status: TaskStatus, t: (key: string) => string): string {
   const statusMap: Record<string, string> = {
     active: t('task.downloading'),

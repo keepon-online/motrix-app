@@ -48,7 +48,6 @@ export function useTheme() {
   }
 
   return {
-    isDark,
     initTheme,
     setTheme,
   }

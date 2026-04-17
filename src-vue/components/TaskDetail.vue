@@ -80,7 +80,7 @@ const btMode = computed(() => task.value?.bittorrent?.mode || '')
 
 const statusText = computed(() => {
   if (!task.value) return ''
-  return getTaskStatusText(task.value.status as import('@/utils').TaskStatus, t)
+  return getTaskStatusText(task.value.status, t)
 })
 
 const statusType = computed((): 'info' | 'success' | 'warning' | 'primary' | 'danger' => {

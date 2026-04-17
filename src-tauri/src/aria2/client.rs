@@ -39,12 +39,12 @@ struct RpcRequest {
 
 impl Aria2Client {
     /// Check if the WebSocket connection is healthy
-    pub fn is_healthy(&self) -> bool {
+    pub(crate) fn is_healthy(&self) -> bool {
         self.healthy.load(Ordering::Acquire)
     }
 
     /// Check if the client is still alive (not intentionally shut down)
-    pub fn is_alive(&self) -> bool {
+    pub(crate) fn is_alive(&self) -> bool {
         self.alive.load(Ordering::Acquire)
     }
 

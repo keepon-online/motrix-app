@@ -253,17 +253,6 @@ function handleClose() {
   resetForm()
 }
 
-/** Handle paste: auto-detect URLs in pasted content */
-function onPaste(e: ClipboardEvent) {
-  const text = e.clipboardData?.getData('text')
-  if (!text) return
-
-  // If pasted content contains multiple lines, auto-populate
-  const lines = text.split(/[\r\n]+/).filter((l) => l.trim())
-  if (lines.length > 1) {
-    // Let default paste happen — the v-model binding handles it
-  }
-}
 </script>
 
 <template>
@@ -282,7 +271,6 @@ function onPaste(e: ClipboardEvent) {
             type="textarea"
             :rows="5"
             :placeholder="t('dialog.urlPlaceholder')"
-            @paste="onPaste"
           />
           <div v-if="uriLines.some(l => !l.empty && !l.valid)" class="uri-validation">
             <div

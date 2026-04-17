@@ -14,9 +14,6 @@ pub enum Error {
     #[error("WebSocket error: {0}")]
     WebSocket(String),
 
-    #[error("Config error: {0}")]
-    Config(String),
-
     #[error("Tauri error: {0}")]
     Tauri(#[from] tauri::Error),
 

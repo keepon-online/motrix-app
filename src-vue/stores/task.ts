@@ -3,9 +3,9 @@ import { ref, computed } from 'vue'
 import type { Task, GlobalStat, AddTaskOptions } from '@/types'
 import { invoke } from '@tauri-apps/api/core'
 
-export type TaskListType = 'active' | 'waiting' | 'stopped'
-export type SortField = 'name' | 'size' | 'progress' | 'speed' | 'default'
-export type SortOrder = 'asc' | 'desc'
+type TaskListType = 'active' | 'waiting' | 'stopped'
+type SortField = 'name' | 'size' | 'progress' | 'speed' | 'default'
+type SortOrder = 'asc' | 'desc'
 
 export const useTaskStore = defineStore('task', () => {
   // State
@@ -15,7 +15,6 @@ export const useTaskStore = defineStore('task', () => {
   const currentTask = ref<Task | null>(null)
   const detailVisible = ref(false)
   const globalStat = ref<GlobalStat | null>(null)
-  const loading = ref(false)
   const fetching = ref(false)
   const searchQuery = ref('')
   const sortField = ref<SortField>('default')
@@ -361,7 +360,6 @@ export const useTaskStore = defineStore('task', () => {
     currentTask,
     detailVisible,
     globalStat,
-    loading,
     fetching,
     searchQuery,
     sortField,

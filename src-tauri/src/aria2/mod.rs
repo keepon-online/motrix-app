@@ -9,7 +9,6 @@ pub mod client;
 pub mod events;
 
 pub use client::Aria2Client;
-pub use events::{Aria2Event, Aria2EventType};
 
 use crate::{Error, Result};
 use std::sync::Arc;

@@ -33,7 +33,7 @@ fn decode_thunder_url(url: &str) -> String {
 }
 
 /// Check if a string is a downloadable URL
-pub fn is_downloadable_url(s: &str) -> bool {
+fn is_downloadable_url(s: &str) -> bool {
     let lower = s.to_lowercase();
     lower.starts_with("http://")
         || lower.starts_with("https://")
@@ -44,13 +44,13 @@ pub fn is_downloadable_url(s: &str) -> bool {
 }
 
 /// Check if a string is a path to an existing .torrent file
-pub fn is_torrent_file(s: &str) -> bool {
+fn is_torrent_file(s: &str) -> bool {
     s.to_lowercase().ends_with(".torrent")
         && std::path::Path::new(s).exists()
 }
 
 /// Check if a string is a path to an existing metalink file
-pub fn is_metalink_file(s: &str) -> bool {
+fn is_metalink_file(s: &str) -> bool {
     let lower = s.to_lowercase();
     (lower.ends_with(".metalink") || lower.ends_with(".meta4"))
         && std::path::Path::new(s).exists()
