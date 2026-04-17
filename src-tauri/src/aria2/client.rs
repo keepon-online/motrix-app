@@ -38,16 +38,6 @@ struct RpcRequest {
 }
 
 impl Aria2Client {
-    /// Check if the WebSocket connection is healthy
-    pub(crate) fn is_healthy(&self) -> bool {
-        self.healthy.load(Ordering::Acquire)
-    }
-
-    /// Check if the client is still alive (not intentionally shut down)
-    pub(crate) fn is_alive(&self) -> bool {
-        self.alive.load(Ordering::Acquire)
-    }
-
     /// Mark the client as intentionally shutting down.
     /// This prevents the reconnection loop from retrying.
     pub fn mark_shutdown(&self) {

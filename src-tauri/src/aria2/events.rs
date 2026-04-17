@@ -35,7 +35,7 @@ pub(super) struct NotificationParam {
 }
 
 /// Handle aria2 notification events and emit to frontend
-pub fn handle_notification(app_handle: &AppHandle, notification: Aria2Notification) {
+pub(super) fn handle_notification(app_handle: &AppHandle, notification: Aria2Notification) {
     let event_type = match notification.method.as_str() {
         "aria2.onDownloadStart" => Aria2EventType::DownloadStart,
         "aria2.onDownloadPause" => Aria2EventType::DownloadPause,
