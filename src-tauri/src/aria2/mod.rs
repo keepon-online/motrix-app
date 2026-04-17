@@ -11,8 +11,8 @@ pub mod events;
 pub use client::Aria2Client;
 
 use crate::{Error, Result};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::RwLock;
 
@@ -22,7 +22,8 @@ static ARIA2_CLIENT: RwLock<Option<Arc<Aria2Client>>> = RwLock::const_new(None);
 /// Global aria2 child process handle (must be kept alive to prevent process from being killed)
 /// Uses std::sync::Mutex instead of tokio::sync::Mutex because CommandChild may be !Send
 /// on some platforms (Windows). A synchronous lock avoids holding !Send types across await points.
-static ARIA2_PROCESS: std::sync::Mutex<Option<tauri_plugin_shell::process::CommandChild>> = std::sync::Mutex::new(None);
+static ARIA2_PROCESS: std::sync::Mutex<Option<tauri_plugin_shell::process::CommandChild>> =
+    std::sync::Mutex::new(None);
 
 /// True when the engine is being intentionally shut down
 static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
@@ -30,16 +31,24 @@ static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
 /// True while `init_engine` is running (prevents concurrent initialization)
 static INITIALIZING: AtomicBool = AtomicBool::new(false);
 
+/// True when the engine is waiting to restart after an unexpected termination
+static RECOVERING: AtomicBool = AtomicBool::new(false);
+
 /// Crash restart counter — caps restart attempts to prevent infinite loops
 static RESTART_COUNT: AtomicU32 = AtomicU32::new(0);
 const MAX_RESTARTS: u32 = 3;
+const CLIENT_WAIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+const CLIENT_WAIT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
 
 /// Kill any orphaned aria2c processes listening on the given port
 fn kill_orphaned_aria2c(port: u16) {
     #[cfg(target_os = "windows")]
     {
         let output = std::process::Command::new("cmd")
-            .args(["/C", &format!("netstat -ano | findstr \"LISTENING\" | findstr \":{port}\"")])
+            .args([
+                "/C",
+                &format!("netstat -ano | findstr \"LISTENING\" | findstr \":{port}\""),
+            ])
             .output();
         if let Ok(output) = output {
             let stdout = String::from_utf8_lossy(&output.stdout);
@@ -47,7 +56,11 @@ fn kill_orphaned_aria2c(port: u16) {
                 if let Some(pid_str) = line.split_whitespace().last() {
                     if let Ok(pid) = pid_str.parse::<u32>() {
                         if pid > 0 {
-                            tracing::info!("Killing orphaned process on port {} (PID: {})", port, pid);
+                            tracing::info!(
+                                "Killing orphaned process on port {} (PID: {})",
+                                port,
+                                pid
+                            );
                             let _ = std::process::Command::new("taskkill")
                                 .args(["/F", "/PID", &pid.to_string()])
                                 .output();
@@ -111,16 +124,19 @@ pub async fn shutdown_and_cleanup() {
 
     let mut guard = ARIA2_CLIENT.write().await;
     *guard = None;
+    RECOVERING.store(false, Ordering::SeqCst);
 }
 
 /// Initialize aria2 engine
 pub async fn init_engine(app: &AppHandle) -> Result<()> {
-    use tauri_plugin_store::StoreExt;
     use crate::config::AppConfig;
+    use tauri_plugin_store::StoreExt;
 
     // Re-entrancy guard: prevent concurrent initialization
     if INITIALIZING.swap(true, Ordering::SeqCst) {
-        return Err(Error::Custom("Engine initialization already in progress".into()));
+        return Err(Error::Custom(
+            "Engine initialization already in progress".into(),
+        ));
     }
 
     // RAII guard: ensures INITIALIZING is reset on ALL exit paths (including panic/drop)
@@ -133,6 +149,7 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
     let _init_guard = InitGuard;
 
     SHUTTING_DOWN.store(false, Ordering::SeqCst);
+    RECOVERING.store(false, Ordering::SeqCst);
     RESTART_COUNT.store(0, Ordering::SeqCst);
 
     let store = app.store("config.json")?;
@@ -179,7 +196,8 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
 
     let shell = app.shell();
 
-    let app_data_dir = app.path()
+    let app_data_dir = app
+        .path()
         .app_data_dir()
         .map_err(|e| Error::Custom(format!("Failed to get app data dir: {}", e)))?;
     std::fs::create_dir_all(&app_data_dir)
@@ -240,11 +258,19 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
                         tracing::info!("Aria2 process terminated (intentional shutdown)");
                         return;
                     }
-                    let code = payload.code.map(|c| c.to_string()).unwrap_or_else(|| "unknown".into());
-                    tracing::warn!("Aria2 process terminated unexpectedly (exit code: {})", code);
+                    let code = payload
+                        .code
+                        .map(|c| c.to_string())
+                        .unwrap_or_else(|| "unknown".into());
+                    tracing::warn!(
+                        "Aria2 process terminated unexpectedly (exit code: {})",
+                        code
+                    );
                     // Double-check after logging to avoid race with concurrent shutdown
                     if SHUTTING_DOWN.load(Ordering::SeqCst) {
-                        tracing::info!("Shutdown started during termination handling, aborting notification");
+                        tracing::info!(
+                            "Shutdown started during termination handling, aborting notification"
+                        );
                         return;
                     }
 
@@ -256,19 +282,30 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
 
                     let count = RESTART_COUNT.fetch_add(1, Ordering::SeqCst);
                     if count >= MAX_RESTARTS {
-                        tracing::error!("Max restart attempts ({}) reached, giving up", MAX_RESTARTS);
+                        RECOVERING.store(false, Ordering::SeqCst);
+                        tracing::error!(
+                            "Max restart attempts ({}) reached, giving up",
+                            MAX_RESTARTS
+                        );
                         let _ = watchdog_app.emit("aria2-connection", "terminated");
                         return;
                     }
 
-                    tracing::info!("Auto-restarting engine (attempt {}/{})", count + 1, MAX_RESTARTS);
+                    RECOVERING.store(true, Ordering::SeqCst);
+                    tracing::info!(
+                        "Auto-restarting engine (attempt {}/{})",
+                        count + 1,
+                        MAX_RESTARTS
+                    );
                     let _ = watchdog_app.emit("aria2-connection", "reconnecting");
 
                     // Exponential backoff: 2s, 4s, 8s
                     let delay = std::time::Duration::from_secs(2u64.pow(count + 1));
                     tokio::time::sleep(delay).await;
 
-                    if SHUTTING_DOWN.load(Ordering::SeqCst) { return; }
+                    if SHUTTING_DOWN.load(Ordering::SeqCst) {
+                        return;
+                    }
 
                     match init_engine(&watchdog_app).await {
                         Ok(()) => {
@@ -276,6 +313,7 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
                             tracing::info!("Engine auto-restart succeeded");
                         }
                         Err(e) => {
+                            RECOVERING.store(false, Ordering::SeqCst);
                             tracing::error!("Engine auto-restart failed: {}", e);
                             // Emit terminated if this was the last attempt
                             if RESTART_COUNT.load(Ordering::SeqCst) >= MAX_RESTARTS {
@@ -300,8 +338,131 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
 
 /// Get the global aria2 client
 pub async fn get_client() -> Result<Arc<Aria2Client>> {
+    {
+        let guard = ARIA2_CLIENT.read().await;
+        if let Some(client) = guard.clone() {
+            return Ok(client);
+        }
+    }
+
+    let should_wait = || {
+        !SHUTTING_DOWN.load(Ordering::SeqCst)
+            && (INITIALIZING.load(Ordering::SeqCst) || RECOVERING.load(Ordering::SeqCst))
+    };
+
+    if should_wait() {
+        let started = tokio::time::Instant::now();
+        while started.elapsed() < CLIENT_WAIT_TIMEOUT {
+            tokio::time::sleep(CLIENT_WAIT_POLL_INTERVAL).await;
+
+            let guard = ARIA2_CLIENT.read().await;
+            if let Some(client) = guard.clone() {
+                return Ok(client);
+            }
+
+            if !should_wait() {
+                break;
+            }
+        }
+    }
+
     let guard = ARIA2_CLIENT.read().await;
     guard
         .clone()
         .ok_or_else(|| Error::Aria2Rpc("Aria2 client not initialized".into()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::time::{timeout, Duration};
+
+    static TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    async fn reset_test_state() {
+        SHUTTING_DOWN.store(false, Ordering::SeqCst);
+        INITIALIZING.store(false, Ordering::SeqCst);
+        RECOVERING.store(false, Ordering::SeqCst);
+        RESTART_COUNT.store(0, Ordering::SeqCst);
+        let mut guard = ARIA2_CLIENT.write().await;
+        *guard = None;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn get_client_waits_for_initialization_window_before_failing() {
+        let _lock = TEST_MUTEX.lock().unwrap();
+        reset_test_state().await;
+        INITIALIZING.store(true, Ordering::SeqCst);
+
+        let early = timeout(Duration::from_millis(20), get_client()).await;
+        assert!(
+            early.is_err(),
+            "get_client should stay pending while initialization is still in progress"
+        );
+
+        INITIALIZING.store(false, Ordering::SeqCst);
+
+        let result = timeout(Duration::from_millis(100), get_client())
+            .await
+            .expect("get_client should return once initialization window closes");
+
+        match result {
+            Err(Error::Aria2Rpc(message)) => {
+                assert_eq!(message, "Aria2 client not initialized");
+            }
+            Ok(_) => panic!("get_client unexpectedly returned a client"),
+            Err(other) => panic!("get_client returned unexpected error: {other}"),
+        }
+
+        reset_test_state().await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn get_client_waits_for_recovery_window_before_failing() {
+        let _lock = TEST_MUTEX.lock().unwrap();
+        reset_test_state().await;
+        RECOVERING.store(true, Ordering::SeqCst);
+
+        let early = timeout(Duration::from_millis(20), get_client()).await;
+        assert!(
+            early.is_err(),
+            "get_client should stay pending while engine recovery is in progress"
+        );
+
+        RECOVERING.store(false, Ordering::SeqCst);
+
+        let result = timeout(Duration::from_millis(100), get_client())
+            .await
+            .expect("get_client should return once recovery window closes");
+
+        match result {
+            Err(Error::Aria2Rpc(message)) => {
+                assert_eq!(message, "Aria2 client not initialized");
+            }
+            Ok(_) => panic!("get_client unexpectedly returned a client"),
+            Err(other) => panic!("get_client returned unexpected error: {other}"),
+        }
+
+        reset_test_state().await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn get_client_fails_fast_when_engine_is_idle_and_uninitialized() {
+        let _lock = TEST_MUTEX.lock().unwrap();
+        reset_test_state().await;
+
+        let result = timeout(Duration::from_millis(20), get_client())
+            .await
+            .expect("get_client should fail immediately when engine is idle");
+
+        match result {
+            Err(Error::Aria2Rpc(message)) => {
+                assert_eq!(message, "Aria2 client not initialized");
+            }
+            Ok(_) => panic!("get_client unexpectedly returned a client"),
+            Err(other) => panic!("get_client returned unexpected error: {other}"),
+        }
+
+        reset_test_state().await;
+    }
 }

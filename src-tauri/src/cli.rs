@@ -45,13 +45,64 @@ fn is_downloadable_url(s: &str) -> bool {
 
 /// Check if a string is a path to an existing .torrent file
 fn is_torrent_file(s: &str) -> bool {
-    s.to_lowercase().ends_with(".torrent")
-        && std::path::Path::new(s).exists()
+    s.to_lowercase().ends_with(".torrent") && std::path::Path::new(s).exists()
 }
 
 /// Check if a string is a path to an existing metalink file
 fn is_metalink_file(s: &str) -> bool {
     let lower = s.to_lowercase();
-    (lower.ends_with(".metalink") || lower.ends_with(".meta4"))
-        && std::path::Path::new(s).exists()
+    (lower.ends_with(".metalink") || lower.ends_with(".meta4")) && std::path::Path::new(s).exists()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_args;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn create_temp_file(extension: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after epoch")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "motrix-cli-test-{}-{}.{}",
+            std::process::id(),
+            unique,
+            extension
+        ));
+        fs::write(&path, b"test").expect("temp file should be created");
+        path
+    }
+
+    #[test]
+    fn parse_args_accepts_platform_native_torrent_file_paths() {
+        let torrent = create_temp_file("torrent");
+        let torrent_arg = torrent.to_string_lossy().to_string();
+        let argv = vec!["motrix".to_string(), torrent_arg.clone()];
+
+        let parsed = parse_args(&argv);
+
+        assert_eq!(parsed, vec![torrent_arg]);
+
+        fs::remove_file(torrent).expect("temp file should be removed");
+    }
+
+    #[test]
+    fn parse_args_ignores_missing_torrent_file_paths() {
+        let missing = std::env::temp_dir().join(format!(
+            "motrix-cli-missing-{}-{}.torrent",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock should be after epoch")
+                .as_nanos()
+        ));
+        let argv = vec!["motrix".to_string(), missing.to_string_lossy().to_string()];
+
+        let parsed = parse_args(&argv);
+
+        assert!(parsed.is_empty());
+    }
 }
