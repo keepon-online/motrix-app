@@ -14,13 +14,15 @@ use crate::{Error, Result};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
 /// Global aria2 client instance
 static ARIA2_CLIENT: RwLock<Option<Arc<Aria2Client>>> = RwLock::const_new(None);
 
 /// Global aria2 child process handle (must be kept alive to prevent process from being killed)
-static ARIA2_PROCESS: Mutex<Option<tauri_plugin_shell::process::CommandChild>> = Mutex::const_new(None);
+/// Uses std::sync::Mutex instead of tokio::sync::Mutex because CommandChild may be !Send
+/// on some platforms (Windows). A synchronous lock avoids holding !Send types across await points.
+static ARIA2_PROCESS: std::sync::Mutex<Option<tauri_plugin_shell::process::CommandChild>> = std::sync::Mutex::new(None);
 
 /// True when the engine is being intentionally shut down
 static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
@@ -78,7 +80,7 @@ fn kill_orphaned_aria2c(port: u16) {
 
 /// Force kill the managed aria2c child process
 pub(crate) async fn force_kill_process() {
-    let mut guard = ARIA2_PROCESS.lock().await;
+    let mut guard = ARIA2_PROCESS.lock().unwrap();
     if let Some(child) = guard.take() {
         tracing::info!("Force killing aria2c child process");
         let _ = child.kill();
@@ -140,7 +142,7 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
     let secret = config.rpc_secret.clone();
 
     kill_orphaned_aria2c(port);
-    start_aria2_process(app, &config).await?;
+    start_aria2_process(app, &config)?;
 
     let mut client = None;
     for attempt in 1..=10 {
@@ -172,7 +174,7 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
 }
 
 /// Start aria2 process and spawn a watchdog to detect unexpected termination
-async fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Result<()> {
+fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Result<()> {
     use tauri_plugin_shell::ShellExt;
 
     let shell = app.shell();
@@ -224,7 +226,7 @@ async fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig)
         .spawn()
         .map_err(|e| Error::Custom(format!("Failed to spawn aria2c: {}", e)))?;
 
-    let mut process_guard = ARIA2_PROCESS.lock().await;
+    let mut process_guard = ARIA2_PROCESS.lock().unwrap();
     *process_guard = Some(child);
 
     // Spawn process watchdog to detect unexpected termination and auto-restart

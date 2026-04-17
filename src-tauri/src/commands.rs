@@ -3,6 +3,7 @@
 use crate::aria2;
 use crate::config::AppConfig;
 use crate::error::Error;
+use tauri::Manager;
 use crate::tray::TrayLabels;
 use crate::Result;
 use serde_json::Value;
