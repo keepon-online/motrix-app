@@ -249,11 +249,59 @@ impl AppConfig {
             }
         }
 
-        // Add BT trackers if configured
-        if !self.bt_tracker.is_empty() {
-            args.push(format!("--bt-tracker={}", self.bt_tracker));
+        args
+    }
+
+    /// Convert config entries that should be persisted in aria2.conf
+    pub fn to_aria2_conf_lines(&self) -> Vec<String> {
+        let mut lines = vec![format!("rpc-secret={}", self.rpc_secret)];
+
+        if self.proxy_enabled && !self.proxy_password.is_empty() {
+            lines.push(format!("all-proxy-passwd={}", self.proxy_password));
         }
 
-        args
+        // Tracker lists can become very large; keep them out of Windows spawn args.
+        if !self.bt_tracker.is_empty() {
+            lines.push(format!("bt-tracker={}", self.bt_tracker));
+        }
+
+        lines
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AppConfig;
+
+    #[test]
+    fn bt_tracker_is_not_passed_via_cli_args() {
+        let mut config = AppConfig::default();
+        config.bt_tracker = (0..512)
+            .map(|index| format!("udp://tracker{index}.example.com:6969/announce"))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let args = config.to_aria2_args();
+
+        assert!(
+            args.iter().all(|arg| !arg.starts_with("--bt-tracker=")),
+            "bt-tracker should be written to aria2.conf instead of CLI args"
+        );
+    }
+
+    #[test]
+    fn bt_tracker_is_written_to_aria2_conf() {
+        let mut config = AppConfig::default();
+        config.rpc_secret = "secret".to_string();
+        config.bt_tracker = "udp://tracker.example.com:6969/announce".to_string();
+
+        let lines = config.to_aria2_conf_lines();
+
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "bt-tracker=udp://tracker.example.com:6969/announce"),
+            "bt-tracker should be persisted in aria2.conf"
+        );
     }
 }

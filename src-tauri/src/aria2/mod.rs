@@ -224,15 +224,7 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
     // Write sensitive options (rpc-secret, proxy password) to a conf file to avoid
     // exposure in process list (visible via `ps aux`, Task Manager, etc.)
     let conf_path = app_data_dir.join("aria2.conf");
-    let mut conf_lines: Vec<String> = Vec::new();
-
-    conf_lines.push(format!("rpc-secret={}", config.rpc_secret));
-
-    if config.proxy_enabled && !config.proxy_password.is_empty() {
-        conf_lines.push(format!("all-proxy-passwd={}", config.proxy_password));
-    }
-
-    let conf_content = conf_lines.join("\n");
+    let conf_content = config.to_aria2_conf_lines().join("\n");
     std::fs::write(&conf_path, conf_content)
         .map_err(|e| Error::Custom(format!("Failed to write aria2 conf: {}", e)))?;
     args.push(format!("--conf-path={}", conf_path.display()));
