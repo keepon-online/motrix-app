@@ -147,6 +147,15 @@ fn main() {
             commands::prevent_sleep,
             commands::allow_sleep,
             commands::change_task_position,
+            commands::get_engine_paths,
+            commands::reset_session,
+            commands::factory_reset,
+            commands::restart_engine,
+            commands::get_directory_history,
+            commands::add_directory_to_history,
+            commands::toggle_directory_favorite,
+            commands::register_protocol_handlers,
+            commands::get_recent_directories,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

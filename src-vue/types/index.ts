@@ -100,6 +100,15 @@ export interface AppConfig {
   btLoadSavedMetadata: boolean
   btRemoveUnselectedFile: boolean
   btDetachSeedOnly: boolean
+  // Behavior settings
+  keepWindowState: boolean
+  newTaskShowDownloading: boolean
+  noConfirmBeforeDeleteTask: boolean
+  autoCheckUpdate: boolean
+  lastCheckUpdateTime: number
+  // Protocol handlers
+  defaultMagnetClient: boolean
+  defaultThunderClient: boolean
 }
 
 // Add task options

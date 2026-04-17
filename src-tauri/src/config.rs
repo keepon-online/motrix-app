@@ -64,6 +64,17 @@ pub struct AppConfig {
 
     // Tracker auto-sync
     pub last_tracker_update: u64,
+
+    // Behavior settings
+    pub keep_window_state: bool,
+    pub new_task_show_downloading: bool,
+    pub no_confirm_before_delete_task: bool,
+    pub auto_check_update: bool,
+    pub last_check_update_time: u64,
+
+    // Protocol handlers
+    pub default_magnet_client: bool,
+    pub default_thunder_client: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -145,6 +156,15 @@ impl Default for AppConfig {
             no_proxy: String::new(),
 
             last_tracker_update: 0,
+
+            keep_window_state: true,
+            new_task_show_downloading: true,
+            no_confirm_before_delete_task: false,
+            auto_check_update: true,
+            last_check_update_time: 0,
+
+            default_magnet_client: false,
+            default_thunder_client: false,
         }
     }
 }

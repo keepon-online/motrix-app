@@ -61,6 +61,8 @@ export const useAppStore = defineStore('app', () => {
       }
       // Migrate old single tracker source to new multi-source defaults
       await migrateTrackerSources()
+      // Load directory history
+      await loadDirectoryHistory()
       // Update tray menu with current locale
       await updateTrayMenu()
     } catch (error) {
@@ -113,7 +115,12 @@ export const useAppStore = defineStore('app', () => {
     maxConnectionPerServer: 'max-connection-per-server',
     split: 'split',
     minSplitSize: 'min-split-size',
+    pauseMetadata: 'pause-metadata',
+    downloadDir: 'dir',
   }
+
+  /** Keys that require engine restart to take effect */
+  const RESTART_REQUIRED_KEYS = new Set(['rpcPort', 'rpcSecret', 'btListenPort', 'dhtListenPort'])
 
   /** Sync relevant config keys to aria2 engine at runtime */
   async function syncToAria2(newConfig: Partial<AppConfig>) {
@@ -154,10 +161,62 @@ export const useAppStore = defineStore('app', () => {
     try {
       await invoke('save_app_config', { config: updated })
       await syncToAria2(newConfig)
+
+      // Check if any restart-required keys changed
+      const needsRestart = Object.keys(newConfig).some(k => RESTART_REQUIRED_KEYS.has(k))
+      if (needsRestart) {
+        restartNeeded.value = true
+      }
     } catch (error) {
       console.error('Failed to save config:', error)
     }
   }, 500)
+
+  /** Whether an engine restart is needed due to config changes */
+  const restartNeeded = ref(false)
+
+  /** Restart the engine to apply pending config */
+  async function restartEngine() {
+    try {
+      await invoke('restart_engine')
+      restartNeeded.value = false
+    } catch (error) {
+      console.error('Failed to restart engine:', error)
+      throw error
+    }
+  }
+
+  // Directory history state
+  const directoryHistory = ref<string[]>([])
+  const directoryFavorites = ref<string[]>([])
+
+  async function loadDirectoryHistory() {
+    try {
+      const result = await invoke<{ history: string[]; favorites: string[] }>('get_directory_history')
+      directoryHistory.value = result.history
+      directoryFavorites.value = result.favorites
+    } catch {
+      // ignore
+    }
+  }
+
+  async function addToDirectoryHistory(dir: string) {
+    try {
+      await invoke('add_directory_to_history', { dir })
+      await loadDirectoryHistory()
+    } catch {
+      // ignore
+    }
+  }
+
+  async function toggleDirectoryFavorite(dir: string) {
+    try {
+      await invoke('toggle_directory_favorite', { dir })
+      await loadDirectoryHistory()
+    } catch {
+      // ignore
+    }
+  }
 
   async function saveConfig(newConfig: Partial<AppConfig>) {
     if (!config.value) return
@@ -179,6 +238,7 @@ export const useAppStore = defineStore('app', () => {
 
   async function setDownloadDir(dir: string) {
     await saveConfig({ downloadDir: dir })
+    await addToDirectoryHistory(dir)
   }
 
   const TRACKER_SYNC_INTERVAL = 12 * 60 * 60 * 1000 // 12 hours
@@ -269,6 +329,13 @@ export const useAppStore = defineStore('app', () => {
       btLoadSavedMetadata: true,
       btRemoveUnselectedFile: false,
       btDetachSeedOnly: false,
+      keepWindowState: true,
+      newTaskShowDownloading: true,
+      noConfirmBeforeDeleteTask: false,
+      autoCheckUpdate: true,
+      lastCheckUpdateTime: 0,
+      defaultMagnetClient: false,
+      defaultThunderClient: false,
     }
   }
 
@@ -277,6 +344,9 @@ export const useAppStore = defineStore('app', () => {
     config,
     loading,
     initialized,
+    restartNeeded,
+    directoryHistory,
+    directoryFavorites,
     // Getters
     isDark,
     locale,
@@ -289,5 +359,9 @@ export const useAppStore = defineStore('app', () => {
     setDownloadDir,
     resetConfig,
     autoSyncTrackers,
+    restartEngine,
+    addToDirectoryHistory,
+    toggleDirectoryFavorite,
+    loadDirectoryHistory,
   }
 })

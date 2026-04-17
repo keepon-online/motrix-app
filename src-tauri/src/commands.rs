@@ -461,3 +461,169 @@ pub async fn change_task_position(gid: String, pos: i32, how: String) -> Result<
     let client = aria2::get_client().await?;
     client.change_position(&gid, pos, &how).await
 }
+
+/// Get engine-related file paths (config, session, log)
+#[tauri::command]
+pub async fn get_engine_paths(app: tauri::AppHandle) -> Result<Value> {
+    let app_data_dir = app.path()
+        .app_data_dir()
+        .map_err(|e| Error::Custom(format!("Failed to get app data dir: {}", e)))?;
+
+    let log_dir = app.path()
+        .app_log_dir()
+        .map_err(|e| Error::Custom(format!("Failed to get log dir: {}", e)))?;
+
+    Ok(serde_json::json!({
+        "appDataDir": app_data_dir.display().to_string(),
+        "aria2Config": app_data_dir.join("aria2.conf").display().to_string(),
+        "aria2Session": app_data_dir.join("aria2.session").display().to_string(),
+        "appLogDir": log_dir.display().to_string(),
+    }))
+}
+
+/// Reset aria2 session — purges task records, pauses all, recreates session file
+#[tauri::command]
+pub async fn reset_session(app: tauri::AppHandle) -> Result<()> {
+    // Purge all download results via RPC
+    if let Ok(client) = aria2::get_client().await {
+        let _ = client.pause_all().await;
+        let _ = client.purge_download_result().await;
+        let _ = client.save_session().await;
+    }
+
+    // Recreate the session file (truncate)
+    let app_data_dir = app.path()
+        .app_data_dir()
+        .map_err(|e| Error::Custom(format!("Failed to get app data dir: {}", e)))?;
+
+    let session_path = app_data_dir.join("aria2.session");
+    std::fs::File::create(&session_path)
+        .map_err(|e| Error::Custom(format!("Failed to reset session file: {}", e)))?;
+
+    tracing::info!("Session reset completed");
+    Ok(())
+}
+
+/// Factory reset — delete all user data and reset config
+#[tauri::command]
+pub async fn factory_reset(app: tauri::AppHandle) -> Result<()> {
+    // Shutdown engine first
+    aria2::shutdown_and_cleanup().await;
+
+    let app_data_dir = app.path()
+        .app_data_dir()
+        .map_err(|e| Error::Custom(format!("Failed to get app data dir: {}", e)))?;
+
+    // Delete all aria2-related files
+    for file_name in &["aria2.conf", "aria2.session", "dht.dat", "dht6.dat"] {
+        let path = app_data_dir.join(file_name);
+        if path.exists() {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+
+    // Delete config store
+    let config_path = app_data_dir.join("config.json");
+    if config_path.exists() {
+        let _ = std::fs::remove_file(&config_path);
+    }
+
+    tracing::info!("Factory reset completed — app will restart with defaults");
+    Ok(())
+}
+
+/// Restart the aria2 engine (for when port/secret changes require restart)
+#[tauri::command]
+pub async fn restart_engine(app: tauri::AppHandle) -> Result<()> {
+    tracing::info!("Restarting aria2 engine...");
+    aria2::shutdown_and_cleanup().await;
+    // Allow shutdown to complete
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    aria2::init_engine(&app).await?;
+    Ok(())
+}
+
+/// Get directory history and favorites from store
+#[tauri::command]
+pub async fn get_directory_history(app: tauri::AppHandle) -> Result<Value> {
+    use tauri_plugin_store::StoreExt;
+    let store = app.store("config.json")?;
+
+    let history = store.get("directoryHistory")
+        .and_then(|v| serde_json::from_value::<Vec<String>>(v.clone()).ok())
+        .unwrap_or_default();
+
+    let favorites = store.get("directoryFavorites")
+        .and_then(|v| serde_json::from_value::<Vec<String>>(v.clone()).ok())
+        .unwrap_or_default();
+
+    Ok(serde_json::json!({ "history": history, "favorites": favorites }))
+}
+
+/// Add a directory to history (auto-trims to 5 most recent)
+#[tauri::command]
+pub async fn add_directory_to_history(app: tauri::AppHandle, dir: String) -> Result<()> {
+    use tauri_plugin_store::StoreExt;
+    let store = app.store("config.json")?;
+
+    let mut history: Vec<String> = store.get("directoryHistory")
+        .and_then(|v| serde_json::from_value::<Vec<String>>(v.clone()).ok())
+        .unwrap_or_default();
+
+    // Remove if already exists, then prepend
+    history.retain(|d| d != &dir);
+    history.insert(0, dir);
+
+    // Keep only 5 most recent
+    history.truncate(5);
+
+    store.set("directoryHistory", serde_json::to_value(&history)?);
+    store.save()?;
+    Ok(())
+}
+
+/// Toggle a directory as favorite (max 5)
+#[tauri::command]
+pub async fn toggle_directory_favorite(app: tauri::AppHandle, dir: String) -> Result<Value> {
+    use tauri_plugin_store::StoreExt;
+    let store = app.store("config.json")?;
+
+    let mut favorites: Vec<String> = store.get("directoryFavorites")
+        .and_then(|v| serde_json::from_value::<Vec<String>>(v.clone()).ok())
+        .unwrap_or_default();
+
+    let is_favorite = if let Some(pos) = favorites.iter().position(|d| d == &dir) {
+        favorites.remove(pos);
+        false
+    } else {
+        if favorites.len() >= 5 {
+            return Err(Error::Custom("Maximum 5 favorite directories".to_string()));
+        }
+        favorites.push(dir);
+        true
+    };
+
+    store.set("directoryFavorites", serde_json::to_value(&favorites)?);
+    store.save()?;
+
+    Ok(serde_json::json!({ "isFavorite": is_favorite }))
+}
+
+/// Register protocol handler for magnet/thunder links
+#[tauri::command]
+pub async fn register_protocol_handlers() -> Result<()> {
+    // Deep link registration is handled by tauri-plugin-deep-link at build time
+    // This command is a no-op placeholder for the settings UI toggle
+    tracing::info!("Protocol handler registration requested");
+    Ok(())
+}
+
+/// Get recent directories (shortcut for directory history)
+#[tauri::command]
+pub async fn get_recent_directories(app: tauri::AppHandle) -> Result<Vec<String>> {
+    use tauri_plugin_store::StoreExt;
+    let store = app.store("config.json")?;
+    Ok(store.get("directoryHistory")
+        .and_then(|v| serde_json::from_value::<Vec<String>>(v.clone()).ok())
+        .unwrap_or_default())
+}
