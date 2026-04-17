@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
+import { useAria2Diagnostics } from '@/composables/useAria2Diagnostics'
 import { useTheme } from '@/composables/useTheme'
 import { open } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@tauri-apps/api/core'
@@ -10,6 +11,13 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 const { t } = useI18n()
 const appStore = useAppStore()
 const { setTheme } = useTheme()
+const {
+  diagnostics: aria2Diagnostics,
+  panelStatus: aria2PanelStatus,
+  markRestartStarted,
+  markRestartFailed,
+  markRestartSucceeded,
+} = useAria2Diagnostics()
 
 const trackerInput = ref('')
 const trackerUpdating = ref(false)
@@ -92,6 +100,53 @@ const lastCheckUpdateText = computed(() => {
   const d = new Date(ts)
   return d.toLocaleString()
 })
+
+function formatTimestamp(ts: number | null): string {
+  if (!ts) return ''
+  return new Date(ts).toLocaleString()
+}
+
+const aria2StatusLabel = computed(() => {
+  switch (aria2PanelStatus.value) {
+    case 'connected':
+      return t('settings.aria2StatusConnected')
+    case 'starting':
+      return t('settings.aria2StatusStarting')
+    case 'restarting':
+      return t('settings.aria2StatusRestarting')
+    case 'reconnecting':
+      return t('settings.aria2StatusReconnecting')
+    case 'disconnected':
+      return t('settings.aria2StatusDisconnected')
+    case 'terminated':
+      return t('settings.aria2StatusTerminated')
+  }
+})
+
+const aria2StatusTagType = computed(() => {
+  switch (aria2PanelStatus.value) {
+    case 'connected':
+      return 'success'
+    case 'starting':
+    case 'restarting':
+      return 'warning'
+    case 'reconnecting':
+      return 'info'
+    case 'disconnected':
+    case 'terminated':
+      return 'danger'
+  }
+})
+
+const aria2LastErrorText = computed(() => aria2Diagnostics.value.lastError ?? t('settings.aria2NoRecentError'))
+const aria2LastErrorTimeText = computed(() => formatTimestamp(aria2Diagnostics.value.lastErrorAt))
+const aria2LastSuccessText = computed(() => {
+  const formatted = formatTimestamp(aria2Diagnostics.value.lastSuccessAt)
+  return formatted || t('settings.aria2Never')
+})
+const aria2ActionLabel = computed(() => (
+  appStore.restartNeeded ? t('settings.restartNow') : t('settings.retryConnection')
+))
 
 // Random helpers
 function randomInt(min: number, max: number): number {
@@ -305,11 +360,14 @@ async function importConfig() {
 
 // Engine restart
 async function doRestartEngine() {
+  markRestartStarted()
   try {
     await appStore.restartEngine()
-    ElMessage.success('Engine restarted successfully')
+    markRestartSucceeded()
+    ElMessage.success(t('settings.engineRestarted'))
   } catch (e) {
-    ElMessage.error(`Failed to restart engine: ${e}`)
+    const message = markRestartFailed(e)
+    ElMessage.error(`${t('settings.restartFailed')}: ${message}`)
   }
 }
 
@@ -968,6 +1026,50 @@ async function checkForUpdates() {
         <!-- Developer Section -->
         <h3 class="settings-section">{{ t('settings.developer') }}</h3>
 
+        <div class="aria2-status-panel">
+          <div class="aria2-status-panel__header">
+            <div class="aria2-status-panel__heading">
+              <div class="aria2-status-panel__title-row">
+                <span class="aria2-status-panel__title">{{ t('settings.aria2Status') }}</span>
+                <el-tag :type="aria2StatusTagType" effect="dark" size="small">
+                  {{ aria2StatusLabel }}
+                </el-tag>
+              </div>
+              <div class="aria2-status-panel__subtitle">
+                {{ t('settings.rpcPort') }}: {{ appStore.config?.rpcPort ?? '—' }}
+              </div>
+            </div>
+            <el-button
+              :type="appStore.restartNeeded ? 'warning' : 'primary'"
+              size="small"
+              :loading="aria2Diagnostics.isRestarting"
+              @click="doRestartEngine"
+            >
+              {{ aria2ActionLabel }}
+            </el-button>
+          </div>
+
+          <div class="aria2-status-grid">
+            <div class="aria2-status-card">
+              <span class="aria2-status-card__label">{{ t('settings.aria2CurrentState') }}</span>
+              <span class="aria2-status-card__value">{{ aria2StatusLabel }}</span>
+            </div>
+            <div class="aria2-status-card">
+              <span class="aria2-status-card__label">{{ t('settings.aria2LastSuccess') }}</span>
+              <span class="aria2-status-card__value">{{ aria2LastSuccessText }}</span>
+            </div>
+            <div class="aria2-status-card aria2-status-card--wide" :class="{ 'has-error': aria2Diagnostics.lastError }">
+              <span class="aria2-status-card__label">{{ t('settings.aria2LastError') }}</span>
+              <span class="aria2-status-card__value aria2-status-card__value--multiline">
+                {{ aria2LastErrorText }}
+              </span>
+              <span v-if="aria2LastErrorTimeText" class="aria2-status-card__meta">
+                {{ aria2LastErrorTimeText }}
+              </span>
+            </div>
+          </div>
+        </div>
+
         <el-form-item v-if="enginePaths.aria2Config" :label="t('settings.aria2ConfigPath')">
           <div class="path-field">
             <el-input :model-value="enginePaths.aria2Config" readonly size="small" />
@@ -1084,6 +1186,98 @@ async function checkForUpdates() {
   color: var(--el-color-warning-dark-2);
   font-size: 13px;
   flex-shrink: 0;
+}
+
+.aria2-status-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, var(--el-fill-color-light), color-mix(in srgb, var(--el-color-primary-light-9) 45%, transparent));
+  border: 1px solid var(--el-border-color-light);
+}
+
+.aria2-status-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.aria2-status-panel__heading {
+  min-width: 0;
+}
+
+.aria2-status-panel__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.aria2-status-panel__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.aria2-status-panel__subtitle {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.aria2-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.aria2-status-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--el-border-color-lighter);
+}
+
+.is-dark .aria2-status-card {
+  background: rgba(18, 24, 33, 0.72);
+}
+
+.aria2-status-card--wide {
+  grid-column: 1 / -1;
+}
+
+.aria2-status-card.has-error {
+  border-color: var(--el-color-danger-light-5);
+}
+
+.aria2-status-card__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--el-text-color-secondary);
+}
+
+.aria2-status-card__value {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--el-text-color-primary);
+}
+
+.aria2-status-card__value--multiline {
+  word-break: break-word;
+}
+
+.aria2-status-card__meta {
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
 }
 
 .tracker-sources {
@@ -1258,6 +1452,16 @@ async function checkForUpdates() {
 .protocol-switches {
   display: flex;
   gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .aria2-status-panel__header {
+    flex-direction: column;
+  }
+
+  .aria2-status-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 // Update check group
