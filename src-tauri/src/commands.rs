@@ -538,8 +538,7 @@ pub async fn factory_reset(app: tauri::AppHandle) -> Result<()> {
 pub async fn restart_engine(app: tauri::AppHandle) -> Result<()> {
     tracing::info!("Restarting aria2 engine...");
     aria2::shutdown_and_cleanup().await;
-    // Allow shutdown to complete
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    aria2::wait_for_engine_idle().await?;
     aria2::init_engine(&app).await?;
     Ok(())
 }

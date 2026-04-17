@@ -39,6 +39,44 @@ static RESTART_COUNT: AtomicU32 = AtomicU32::new(0);
 const MAX_RESTARTS: u32 = 3;
 const CLIENT_WAIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 const CLIENT_WAIT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
+const ENGINE_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+const ENGINE_IDLE_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
+
+fn engine_is_busy() -> bool {
+    INITIALIZING.load(Ordering::SeqCst) || RECOVERING.load(Ordering::SeqCst)
+}
+
+fn should_attempt_recovery_restart() -> bool {
+    !SHUTTING_DOWN.load(Ordering::SeqCst) && RECOVERING.load(Ordering::SeqCst)
+}
+
+async fn wait_for_engine_idle_inner(
+    timeout: std::time::Duration,
+    poll_interval: std::time::Duration,
+) -> Result<()> {
+    let started = tokio::time::Instant::now();
+    while engine_is_busy() {
+        if started.elapsed() >= timeout {
+            return Err(Error::Custom(
+                "Timed out waiting for engine to become idle".into(),
+            ));
+        }
+        tokio::time::sleep(poll_interval).await;
+    }
+    Ok(())
+}
+
+pub async fn wait_for_engine_idle() -> Result<()> {
+    wait_for_engine_idle_inner(ENGINE_IDLE_TIMEOUT, ENGINE_IDLE_POLL_INTERVAL).await
+}
+
+#[cfg(test)]
+async fn wait_for_engine_idle_for_tests(
+    timeout: std::time::Duration,
+    poll_interval: std::time::Duration,
+) -> Result<()> {
+    wait_for_engine_idle_inner(timeout, poll_interval).await
+}
 
 /// Kill any orphaned aria2c processes listening on the given port
 fn kill_orphaned_aria2c(port: u16) {
@@ -163,7 +201,18 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
 
     let mut client = None;
     for attempt in 1..=10 {
+        if SHUTTING_DOWN.load(Ordering::SeqCst) {
+            force_kill_process().await;
+            return Err(Error::Custom("Engine initialization cancelled".into()));
+        }
+
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+        if SHUTTING_DOWN.load(Ordering::SeqCst) {
+            force_kill_process().await;
+            return Err(Error::Custom("Engine initialization cancelled".into()));
+        }
+
         match Aria2Client::new(app.clone(), port, secret.clone()).await {
             Ok(c) => {
                 client = Some(c);
@@ -295,7 +344,10 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
                     let delay = std::time::Duration::from_secs(2u64.pow(count + 1));
                     tokio::time::sleep(delay).await;
 
-                    if SHUTTING_DOWN.load(Ordering::SeqCst) {
+                    if !should_attempt_recovery_restart() {
+                        tracing::info!(
+                            "Skipping recovery restart because recovery is no longer active"
+                        );
                         return;
                     }
 
@@ -454,6 +506,68 @@ mod tests {
             Ok(_) => panic!("get_client unexpectedly returned a client"),
             Err(other) => panic!("get_client returned unexpected error: {other}"),
         }
+
+        reset_test_state().await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn wait_for_engine_idle_blocks_until_initialization_finishes() {
+        let _lock = TEST_MUTEX.lock().unwrap();
+        reset_test_state().await;
+        INITIALIZING.store(true, Ordering::SeqCst);
+
+        let release = tokio::spawn(async {
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            INITIALIZING.store(false, Ordering::SeqCst);
+        });
+
+        let result = timeout(
+            Duration::from_millis(120),
+            wait_for_engine_idle_for_tests(Duration::from_millis(200), Duration::from_millis(10)),
+        )
+        .await
+        .expect("wait_for_engine_idle should complete once initialization finishes");
+
+        assert!(result.is_ok(), "wait_for_engine_idle should succeed after initialization completes");
+
+        release.await.expect("release task should complete");
+        reset_test_state().await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn wait_for_engine_idle_times_out_when_engine_stays_busy() {
+        let _lock = TEST_MUTEX.lock().unwrap();
+        reset_test_state().await;
+        INITIALIZING.store(true, Ordering::SeqCst);
+
+        let result = wait_for_engine_idle_for_tests(Duration::from_millis(20), Duration::from_millis(5)).await;
+
+        match result {
+            Err(Error::Custom(message)) => {
+                assert_eq!(message, "Timed out waiting for engine to become idle");
+            }
+            Ok(()) => panic!("wait_for_engine_idle unexpectedly succeeded"),
+            Err(other) => panic!("wait_for_engine_idle returned unexpected error: {other}"),
+        }
+
+        reset_test_state().await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn recovery_restart_requires_active_recovery_and_no_shutdown() {
+        let _lock = TEST_MUTEX.lock().unwrap();
+        reset_test_state().await;
+
+        RECOVERING.store(true, Ordering::SeqCst);
+        SHUTTING_DOWN.store(false, Ordering::SeqCst);
+        assert!(should_attempt_recovery_restart());
+
+        SHUTTING_DOWN.store(true, Ordering::SeqCst);
+        assert!(!should_attempt_recovery_restart());
+
+        SHUTTING_DOWN.store(false, Ordering::SeqCst);
+        RECOVERING.store(false, Ordering::SeqCst);
+        assert!(!should_attempt_recovery_restart());
 
         reset_test_state().await;
     }
