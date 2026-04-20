@@ -20,7 +20,7 @@ npm run format           # Prettier (src-vue/ only)
 
 **Prerequisites**: Node.js >= 20, Rust >= 1.70, aria2c >= 1.36
 
-**Sidecar setup**: aria2c binary must be at `src-tauri/binaries/aria2c-{target_triple}` (e.g., `aria2c-x86_64-unknown-linux-gnu`).
+**Sidecar setup**: aria2c binary must be at `src-tauri/binaries/motrix-aria2c-{target_triple}` (e.g., `motrix-aria2c-x86_64-unknown-linux-gnu`).
 
 **Linux deps**: `libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev`
 

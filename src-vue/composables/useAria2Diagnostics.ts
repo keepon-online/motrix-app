@@ -8,6 +8,7 @@ import {
   markRestartFailed as reduceRestartFailed,
   markRestartStarted as reduceRestartStarted,
   markRestartSucceeded as reduceRestartSucceeded,
+  recordAria2Failure,
 } from '@/utils/aria2Diagnostics'
 
 const diagnostics = ref(createAria2DiagnosticsState())
@@ -39,6 +40,14 @@ async function setupListeners() {
     })
   } catch (error) {
     console.error('Failed to setup aria2 diagnostics ready listener:', error)
+  }
+
+  try {
+    await listen<string>('aria2-error', (event) => {
+      diagnostics.value = recordAria2Failure(diagnostics.value, event.payload)
+    })
+  } catch (error) {
+    console.error('Failed to setup aria2 diagnostics error listener:', error)
   }
 }
 

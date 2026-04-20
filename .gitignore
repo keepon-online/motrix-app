@@ -30,3 +30,6 @@ npm-debug.log.*
 
 # Sidecar binaries (platform-specific, should be downloaded during build)
 src-tauri/binaries/aria2c-*
+
+# Local sidecar build/download cache
+.sidecar-cache/

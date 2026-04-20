@@ -41,6 +41,7 @@ const CLIENT_WAIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(
 const CLIENT_WAIT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
 const ENGINE_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 const ENGINE_IDLE_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
+const ARIA2_SIDECAR_NAME: &str = "motrix-aria2c";
 
 fn engine_is_busy() -> bool {
     INITIALIZING.load(Ordering::SeqCst) || RECOVERING.load(Ordering::SeqCst)
@@ -76,6 +77,12 @@ async fn wait_for_engine_idle_for_tests(
     poll_interval: std::time::Duration,
 ) -> Result<()> {
     wait_for_engine_idle_inner(timeout, poll_interval).await
+}
+
+pub fn report_engine_failure(app: &AppHandle, message: &str) {
+    RECOVERING.store(false, Ordering::SeqCst);
+    let _ = app.emit("aria2-error", message.to_string());
+    let _ = app.emit("aria2-connection", "terminated");
 }
 
 /// Kill any orphaned aria2c processes listening on the given port
@@ -279,7 +286,7 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
     args.push(format!("--conf-path={}", conf_path.display()));
 
     let (mut rx, child) = shell
-        .sidecar("aria2c")
+        .sidecar(ARIA2_SIDECAR_NAME)
         .map_err(|e| Error::Custom(format!("Failed to create aria2c sidecar: {}", e)))?
         .args(&args)
         .spawn()
@@ -351,6 +358,15 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
                         return;
                     }
 
+                    if let Err(e) = wait_for_engine_idle().await {
+                        if SHUTTING_DOWN.load(Ordering::SeqCst) {
+                            return;
+                        }
+                        tracing::error!("Engine restart preflight failed: {}", e);
+                        report_engine_failure(&watchdog_app, &e.to_string());
+                        return;
+                    }
+
                     match init_engine(&watchdog_app).await {
                         Ok(()) => {
                             RESTART_COUNT.store(0, Ordering::SeqCst);
@@ -359,6 +375,7 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
                         Err(e) => {
                             RECOVERING.store(false, Ordering::SeqCst);
                             tracing::error!("Engine auto-restart failed: {}", e);
+                            report_engine_failure(&watchdog_app, &e.to_string());
                             // Emit terminated if this was the last attempt
                             if RESTART_COUNT.load(Ordering::SeqCst) >= MAX_RESTARTS {
                                 let _ = watchdog_app.emit("aria2-connection", "terminated");

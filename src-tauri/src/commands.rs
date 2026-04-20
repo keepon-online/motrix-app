@@ -539,8 +539,13 @@ pub async fn restart_engine(app: tauri::AppHandle) -> Result<()> {
     tracing::info!("Restarting aria2 engine...");
     aria2::shutdown_and_cleanup().await;
     aria2::wait_for_engine_idle().await?;
-    aria2::init_engine(&app).await?;
-    Ok(())
+    match aria2::init_engine(&app).await {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            aria2::report_engine_failure(&app, &e.to_string());
+            Err(e)
+        }
+    }
 }
 
 /// Get directory history and favorites from store

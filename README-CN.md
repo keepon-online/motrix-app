@@ -57,7 +57,7 @@ sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev
 npm install
 
 # 准备 aria2c sidecar
-cp $(which aria2c) src-tauri/binaries/aria2c-$(rustc -vV | grep host | awk '{print $2}')
+npm run sidecar:prepare
 
 # 启动开发模式
 npm run tauri:dev
@@ -69,6 +69,7 @@ npm run tauri:dev
 |------|------|
 | `npm run dev` | 仅启动 Vite 开发服务器 |
 | `npm run build` | TypeScript 检查 + Vite 构建 |
+| `npm run sidecar:prepare` | 为当前目标复用或自动下载/构建真实的 aria2c sidecar |
 | `npm run tauri:dev` | 完整 Tauri 开发模式 |
 | `npm run tauri:build` | 生产构建 |
 | `npm run lint` | ESLint 代码检查 |

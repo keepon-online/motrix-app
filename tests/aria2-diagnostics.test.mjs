@@ -50,3 +50,26 @@ test('aria2 diagnostics keeps the latest restart failure until recovery succeeds
   assert.equal(state.lastError, null)
   assert.equal(state.lastSuccessAt, 1713340920000)
 })
+
+test('aria2 diagnostics records backend startup failures and starts in starting state', async () => {
+  const diagnosticsModule = await importTypeScriptModule('src-vue/utils/aria2Diagnostics.ts')
+  const {
+    createAria2DiagnosticsState,
+    getAria2PanelStatus,
+    recordAria2Failure,
+  } = diagnosticsModule
+
+  let state = createAria2DiagnosticsState()
+  assert.equal(getAria2PanelStatus(state), 'starting')
+
+  state = recordAria2Failure(
+    state,
+    'WebSocket error: IO error: connection refused',
+    1713340980000,
+  )
+
+  assert.equal(state.connectionState, 'terminated')
+  assert.equal(state.lastError, 'WebSocket error: IO error: connection refused')
+  assert.equal(state.lastErrorAt, 1713340980000)
+  assert.equal(getAria2PanelStatus(state), 'terminated')
+})

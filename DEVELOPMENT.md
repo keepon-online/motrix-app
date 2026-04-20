@@ -74,7 +74,7 @@ Motrix/
 │   ├── capabilities/
 │   │   └── default.json                # Tauri 2 权限声明
 │   ├── binaries/
-│   │   └── aria2c-{target_triple}      # aria2c sidecar 二进制
+│   │   └── motrix-aria2c-{target_triple} # aria2c sidecar 二进制
 │   ├── icons/                          # 应用图标资源
 │   │   ├── icon.png                    # 主图标
 │   │   ├── 512x512.png                 # 高分辨率图标
@@ -159,9 +159,8 @@ sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev
 # 1. 安装前端依赖
 npm install
 
-# 2. 准备 aria2c sidecar（需要已安装 aria2c）
-#    Tauri sidecar 命名规则：aria2c-{target_triple}
-cp $(which aria2c) src-tauri/binaries/aria2c-$(rustc -vV | grep host | awk '{print $2}')
+# 2. 准备 aria2c sidecar（优先复用本机可用 aria2c，否则自动下载/构建）
+npm run sidecar:prepare
 
 # 3. 启动开发模式
 npm run tauri:dev
@@ -173,6 +172,7 @@ npm run tauri:dev
 |------|------|
 | `npm run dev` | 仅启动前端 Vite 开发服务器 (localhost:1420) |
 | `npm run build` | TypeScript 检查 + Vite 前端构建 |
+| `npm run sidecar:prepare` | 为当前目标自动准备真实的 aria2c sidecar |
 | `npm run tauri:dev` | 完整 Tauri 开发模式 (前端+后端+HMR) |
 | `npm run tauri:build` | 生产构建，输出平台安装包 |
 | `npm run lint` | ESLint 代码检查 |
@@ -504,7 +504,7 @@ Tauri App 启动
     → aria2::init_engine()
       → 读取 Store 中的 config (rpcPort, rpcSecret)
       → 创建 session 文件和 DHT 文件
-      → shell.sidecar("aria2c").args(...).spawn()
+      → shell.sidecar("motrix-aria2c").args(...).spawn()
       → 等待 500ms
       → Aria2Client::new() — 建立 WebSocket 连接
       → 存入全局 ARIA2_CLIENT
@@ -546,10 +546,10 @@ Tauri App 启动
 `tauri.conf.json` 中的 `bundle.externalBin` 声明 sidecar：
 
 ```json
-{ "externalBin": ["binaries/aria2c"] }
+{ "externalBin": ["binaries/motrix-aria2c"] }
 ```
 
-二进制文件命名规则：`aria2c-{target_triple}`，例如 `aria2c-x86_64-unknown-linux-gnu`。
+二进制文件命名规则：`motrix-aria2c-{target_triple}`，例如 `motrix-aria2c-x86_64-unknown-linux-gnu`。
 
 ---
 

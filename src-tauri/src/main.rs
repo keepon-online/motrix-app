@@ -87,6 +87,7 @@ fn main() {
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = aria2::init_engine(&app_handle).await {
                     tracing::error!("Failed to initialize aria2 engine: {}", e);
+                    aria2::report_engine_failure(&app_handle, &e.to_string());
                     return;
                 }
 

@@ -1,4 +1,4 @@
-export type Aria2ConnectionState = 'connected' | 'disconnected' | 'reconnecting' | 'terminated'
+export type Aria2ConnectionState = 'starting' | 'connected' | 'disconnected' | 'reconnecting' | 'terminated'
 
 export type Aria2PanelStatus =
   | 'connected'
@@ -19,7 +19,7 @@ export interface Aria2DiagnosticsState {
 
 export function createAria2DiagnosticsState(): Aria2DiagnosticsState {
   return {
-    connectionState: 'connected',
+    connectionState: 'starting',
     engineReady: false,
     isRestarting: false,
     lastError: null,
@@ -48,6 +48,14 @@ export function markRestartStarted(state: Aria2DiagnosticsState): Aria2Diagnosti
 }
 
 export function markRestartFailed(
+  state: Aria2DiagnosticsState,
+  error: unknown,
+  at = Date.now(),
+): Aria2DiagnosticsState {
+  return recordAria2Failure(state, error, at)
+}
+
+export function recordAria2Failure(
   state: Aria2DiagnosticsState,
   error: unknown,
   at = Date.now(),
@@ -107,6 +115,13 @@ export function applyConnectionState(
         lastErrorAt: null,
         lastSuccessAt: at,
       }
+    case 'starting':
+      return {
+        ...state,
+        connectionState,
+        engineReady: false,
+        isRestarting: false,
+      }
     case 'disconnected':
       return {
         ...state,
@@ -132,6 +147,7 @@ export function applyConnectionState(
 }
 
 export function getAria2PanelStatus(state: Aria2DiagnosticsState): Aria2PanelStatus {
+  if (state.connectionState === 'starting') return 'starting'
   if (state.isRestarting) return 'restarting'
   if (state.connectionState === 'reconnecting') return 'reconnecting'
   if (state.connectionState === 'disconnected') return 'disconnected'

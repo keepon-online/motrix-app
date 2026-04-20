@@ -8,8 +8,10 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
+    "sidecar:prepare": "node scripts/prepare-sidecar.mjs",
+    "sidecar:check": "node scripts/check-sidecar.mjs",
+    "tauri:dev": "npm run sidecar:prepare && tauri dev",
+    "tauri:build": "npm run sidecar:prepare && tauri build",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx --fix",
     "format": "prettier --write src-vue/"
   },
