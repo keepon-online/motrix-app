@@ -36,10 +36,12 @@ export function getConfigureArgs(targetTriple) {
 
 export function getRequiredBuildTools(targetTriple) {
   if (targetTriple.includes('apple-darwin')) {
-    return ['autoreconf', 'make', 'pkg-config', 'libtool']
+    // macOS: Homebrew's libtool provides glibtool/glibtoolize; system has Apple libtool
+    return ['autoreconf', 'make', 'pkg-config']
   }
 
-  return ['autoreconf', 'make', 'pkg-config', 'libtool']
+  // Linux: the libtool package installs libtoolize (not libtool); autoreconf -i calls libtoolize
+  return ['autoreconf', 'make', 'pkg-config', 'libtoolize']
 }
 
 export function formatMissingBuildToolsMessage(targetTriple, missingTools) {

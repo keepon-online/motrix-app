@@ -28,8 +28,8 @@ npm-debug.log.*
 # Eslint Cache
 .eslintcache*
 
-# Sidecar binaries (platform-specific, should be downloaded during build)
-src-tauri/binaries/aria2c-*
+# Sidecar binaries (platform-specific, built by prepare-sidecar.mjs in CI)
+src-tauri/binaries/motrix-aria2c-*
 
 # Local sidecar build/download cache
 .sidecar-cache/

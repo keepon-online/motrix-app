@@ -358,6 +358,11 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
                         return;
                     }
 
+                    // RECOVERING was set to gate `should_attempt_recovery_restart()` during
+                    // backoff. Clear it now so `wait_for_engine_idle()` does not wait for
+                    // itself (RECOVERING is included in `engine_is_busy()`).
+                    RECOVERING.store(false, Ordering::SeqCst);
+
                     if let Err(e) = wait_for_engine_idle().await {
                         if SHUTTING_DOWN.load(Ordering::SeqCst) {
                             return;
