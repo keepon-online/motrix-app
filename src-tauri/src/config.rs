@@ -232,7 +232,7 @@ impl AppConfig {
             format!("bt-remove-unselected-file={}", self.bt_remove_unselected_file),
             format!("bt-detach-seed-only={}", self.bt_detach_seed_only),
             format!("follow-metalink={}", self.follow_metalink),
-            format!("enable-upnp={}", self.enable_upnp),
+            "enable-upnp=false".to_string(),
         ];
 
         // Add proxy settings if enabled

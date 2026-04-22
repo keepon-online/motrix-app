@@ -157,6 +157,8 @@ fn main() {
             commands::toggle_directory_favorite,
             commands::register_protocol_handlers,
             commands::get_recent_directories,
+            commands::get_upnp_status,
+            commands::refresh_upnp,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

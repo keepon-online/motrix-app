@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useAria2Diagnostics } from '@/composables/useAria2Diagnostics'
@@ -7,6 +7,7 @@ import { useTheme } from '@/composables/useTheme'
 import { open } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import type { UpnpStatus } from '@/types'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -21,6 +22,8 @@ const {
 
 const trackerInput = ref('')
 const trackerUpdating = ref(false)
+const upnpStatus = ref<UpnpStatus | null>(null)
+const upnpLoading = ref(false)
 
 // Engine paths (developer section)
 const enginePaths = ref<Record<string, string>>({})
@@ -371,6 +374,31 @@ async function doRestartEngine() {
   }
 }
 
+// UPnP status management
+async function fetchUpnpStatus() {
+  try {
+    upnpStatus.value = await invoke<UpnpStatus>('get_upnp_status')
+  } catch {
+    // ignore
+  }
+}
+
+async function refreshUpnp() {
+  upnpLoading.value = true
+  try {
+    upnpStatus.value = await invoke<UpnpStatus>('refresh_upnp')
+  } catch (e) {
+    console.warn('Failed to refresh UPnP:', e)
+  } finally {
+    upnpLoading.value = false
+  }
+}
+
+// Re-fetch UPnP status when toggle changes
+watch(() => appStore.config?.enableUpnp, () => {
+  fetchUpnpStatus()
+})
+
 // Load engine paths on mount
 onMounted(async () => {
   try {
@@ -378,6 +406,7 @@ onMounted(async () => {
   } catch {
     // ignore
   }
+  fetchUpnpStatus()
 })
 
 // Show in folder helper
@@ -731,6 +760,46 @@ async function checkForUpdates() {
             @change="(val: string | number | boolean) => appStore.saveConfig({ enableUpnp: Boolean(val) })"
           />
         </el-form-item>
+
+        <template v-if="appStore.config?.enableUpnp && upnpStatus">
+          <div class="upnp-status-panel">
+            <div class="upnp-status-row">
+              <span class="upnp-label">{{ t('settings.upnpStatus') }}</span>
+              <el-tag
+                :type="upnpStatus.gatewayFound ? 'success' : 'warning'"
+                size="small"
+                effect="plain"
+              >
+                {{ upnpStatus.gatewayFound ? t('settings.upnpConnected') : t('settings.upnpDisconnected') }}
+              </el-tag>
+            </div>
+            <div class="upnp-status-row" v-if="upnpStatus.externalIp">
+              <span class="upnp-label">{{ t('settings.externalIp') }}</span>
+              <span class="upnp-value">{{ upnpStatus.externalIp }}</span>
+            </div>
+            <div class="upnp-status-row" v-if="upnpStatus.mappedPorts.length > 0">
+              <span class="upnp-label">{{ t('settings.mappedPorts') }}</span>
+              <div class="upnp-ports">
+                <el-tag
+                  v-for="mp in upnpStatus.mappedPorts"
+                  :key="`${mp.port}-${mp.protocol}`"
+                  size="small"
+                  effect="plain"
+                  type="info"
+                >
+                  {{ mp.port }}/{{ mp.protocol }}
+                </el-tag>
+              </div>
+            </div>
+            <el-button
+              size="small"
+              :loading="upnpLoading"
+              @click="refreshUpnp"
+            >
+              {{ t('settings.refreshUpnp') }}
+            </el-button>
+          </div>
+        </template>
 
         <el-form-item :label="t('settings.seedRatio')">
           <el-input-number
@@ -1422,6 +1491,42 @@ async function checkForUpdates() {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+// UPnP status panel
+.upnp-status-panel {
+  margin: 0 0 18px 0;
+  padding: 12px 16px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-fill-color-lighter, #f5f7fa);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+
+  .upnp-status-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .upnp-label {
+    color: var(--el-text-color-secondary);
+    font-size: 13px;
+    min-width: 80px;
+  }
+
+  .upnp-value {
+    font-family: monospace;
+    font-size: 13px;
+  }
+
+  .upnp-ports {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
 }
 
 // RPC secret group

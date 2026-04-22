@@ -111,6 +111,20 @@ export interface AppConfig {
   defaultThunderClient: boolean
 }
 
+// UPnP status
+export interface UpnpPortMapping {
+  port: number
+  protocol: 'TCP' | 'UDP'
+  description: string
+}
+
+export interface UpnpStatus {
+  enabled: boolean
+  gatewayFound: boolean
+  externalIp: string | null
+  mappedPorts: UpnpPortMapping[]
+}
+
 // Add task options
 export interface AddTaskOptions {
   dir?: string

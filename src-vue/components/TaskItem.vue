@@ -101,6 +101,10 @@ const isPaused = computed(() => props.task.status === 'paused' || props.task.sta
 const isWaiting = computed(() => props.task.status === 'waiting' || props.task.status === 'paused')
 const isComplete = computed(() => props.task.status === 'complete')
 const isError = computed(() => props.task.status === 'error')
+const isBT = computed(() => !!props.task.bittorrent)
+const seeders = computed(() => props.task.numSeeders || '0')
+const btConnections = computed(() => props.task.connections || '0')
+const hasPeers = computed(() => parseInt(seeders.value) > 0)
 
 const firstFilePath = computed(() => {
   if (props.task.files?.[0]?.path) return props.task.files[0].path
@@ -162,6 +166,9 @@ async function copyLink() {
         <span v-if="isActive" class="task-speed">
           <el-icon><Download /></el-icon> {{ downloadSpeed }}
           <el-icon style="margin-left: 8px"><Upload /></el-icon> {{ uploadSpeed }}
+        </span>
+        <span v-if="isActive && isBT" class="task-bt-info" :class="{ 'has-peers': hasPeers }">
+          {{ t('task.btInfo', { seeders: seeders, connections: btConnections }) }}
         </span>
         <span v-if="isActive" class="task-eta">{{ t('detail.eta') }}: {{ remainingTime }}</span>
         <span v-if="!isActive" class="task-status" :title="statusText">{{ statusText }}</span>
@@ -359,6 +366,18 @@ async function copyLink() {
     display: flex;
     align-items: center;
     gap: 4px;
+  }
+
+  .task-bt-info {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--el-text-color-secondary);
+    font-variant-numeric: tabular-nums;
+
+    &.has-peers {
+      color: var(--el-color-success);
+    }
   }
 }
 

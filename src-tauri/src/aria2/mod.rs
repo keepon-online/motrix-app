@@ -167,6 +167,8 @@ pub async fn shutdown_and_cleanup() {
         force_kill_process().await;
     }
 
+    crate::upnp::unmap_all().await;
+
     let mut guard = ARIA2_CLIENT.write().await;
     *guard = None;
     RECOVERING.store(false, Ordering::SeqCst);
@@ -241,6 +243,13 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
     *guard = Some(client);
 
     tracing::info!("Aria2 engine initialized on port {}", port);
+
+    // Map UPnP ports if enabled
+    if config.enable_upnp {
+        crate::upnp::set_enabled(true);
+        crate::upnp::map_ports(config.bt_listen_port, config.dht_listen_port).await;
+    }
+
     let _ = app.emit("aria2-ready", ());
     Ok(())
     // _init_guard dropped here → INITIALIZING reset to false

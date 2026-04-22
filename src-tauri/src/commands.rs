@@ -614,6 +614,28 @@ pub async fn toggle_directory_favorite(app: tauri::AppHandle, dir: String) -> Re
     Ok(serde_json::json!({ "isFavorite": is_favorite }))
 }
 
+/// Get UPnP port mapping status
+#[tauri::command]
+pub async fn get_upnp_status() -> Result<crate::upnp::UpnpStatus> {
+    Ok(crate::upnp::get_status().await)
+}
+
+/// Refresh UPnP port mappings (re-discover gateway and re-map ports)
+#[tauri::command]
+pub async fn refresh_upnp(app: tauri::AppHandle) -> Result<crate::upnp::UpnpStatus> {
+    let store = app.store("config.json")?;
+    let config = AppConfig::load_from_store(&store);
+
+    crate::upnp::set_enabled(config.enable_upnp);
+    if config.enable_upnp {
+        crate::upnp::map_ports(config.bt_listen_port, config.dht_listen_port).await;
+    } else {
+        crate::upnp::unmap_all().await;
+    }
+
+    Ok(crate::upnp::get_status().await)
+}
+
 /// Register protocol handler for magnet/thunder links
 #[tauri::command]
 pub async fn register_protocol_handlers() -> Result<()> {

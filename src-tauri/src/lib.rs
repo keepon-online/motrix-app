@@ -8,5 +8,6 @@ pub mod config;
 pub mod error;
 pub mod power;
 pub mod tray;
+pub mod upnp;
 
 pub use error::{Error, Result};
