@@ -110,6 +110,7 @@ export function applyConnectionState(
       return {
         ...state,
         connectionState,
+        engineReady: true,
         isRestarting: false,
         lastError: null,
         lastErrorAt: null,

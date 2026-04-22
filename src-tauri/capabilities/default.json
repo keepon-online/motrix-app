@@ -36,6 +36,25 @@
     "notification:allow-notify",
     "shell:default",
     "shell:allow-open",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "binaries/motrix-aria2c",
+          "sidecar": true,
+          "args": true
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-kill",
+      "allow": [
+        {
+          "name": "binaries/motrix-aria2c",
+          "sidecar": true
+        }
+      ]
+    },
     "store:default",
     "process:default",
     "process:allow-exit",

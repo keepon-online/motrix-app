@@ -77,7 +77,6 @@ export const useTaskStore = defineStore('task', () => {
   async function fetchTasks(type?: TaskListType) {
     const listType = type ?? currentListType.value
 
-    // Loading guard: skip if previous fetch still in-flight
     if (fetching.value) return
     fetching.value = true
 
