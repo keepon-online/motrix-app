@@ -268,22 +268,21 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
     let dht_path = app_data_dir.join("dht.dat");
     let dht6_path = app_data_dir.join("dht6.dat");
 
-    let mut args = config.to_aria2_args();
-    args.extend([
-        format!("--save-session={}", session_path.display()),
-        format!("--input-file={}", session_path.display()),
-        "--save-session-interval=10".to_string(),
-        format!("--dht-file-path={}", dht_path.display()),
-        format!("--dht-file-path6={}", dht6_path.display()),
-    ]);
+    // Write ALL configuration to aria2.conf to keep CLI args minimal.
+    // This avoids Windows OS error 206 (filename too long) caused by excessive CLI arguments.
+    let mut conf_lines = config.to_aria2_conf_lines();
+    conf_lines.push(format!("save-session={}", session_path.display()));
+    conf_lines.push(format!("input-file={}", session_path.display()));
+    conf_lines.push("save-session-interval=10".to_string());
+    conf_lines.push(format!("dht-file-path={}", dht_path.display()));
+    conf_lines.push(format!("dht-file-path6={}", dht6_path.display()));
 
-    // Write sensitive options (rpc-secret, proxy password) to a conf file to avoid
-    // exposure in process list (visible via `ps aux`, Task Manager, etc.)
     let conf_path = app_data_dir.join("aria2.conf");
-    let conf_content = config.to_aria2_conf_lines().join("\n");
-    std::fs::write(&conf_path, conf_content)
+    std::fs::write(&conf_path, conf_lines.join("\n"))
         .map_err(|e| Error::Custom(format!("Failed to write aria2 conf: {}", e)))?;
-    args.push(format!("--conf-path={}", conf_path.display()));
+
+    // Only pass --conf-path via CLI — everything else is in the conf file
+    let args = vec![format!("--conf-path={}", conf_path.display())];
 
     let (mut rx, child) = shell
         .sidecar(ARIA2_SIDECAR_NAME)

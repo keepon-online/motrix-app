@@ -189,46 +189,50 @@ impl AppConfig {
         }
     }
 
-    /// Convert to aria2 command line arguments
-    pub fn to_aria2_args(&self) -> Vec<String> {
-        let mut args = vec![
-            format!("--dir={}", self.download_dir.display()),
-            format!("--max-concurrent-downloads={}", self.max_concurrent_downloads),
-            format!("--max-connection-per-server={}", self.max_connection_per_server),
-            format!("--split={}", self.split),
-            format!("--min-split-size={}", self.min_split_size),
-            format!("--max-download-limit={}", self.max_download_limit),
-            format!("--max-upload-limit={}", self.max_upload_limit),
-            format!("--listen-port={}", self.bt_listen_port),
-            format!("--dht-listen-port={}", self.dht_listen_port),
-            format!("--seed-ratio={}", self.seed_ratio),
-            format!("--seed-time={}", self.seed_time),
-            format!("--user-agent={}", self.user_agent),
-            format!("--rpc-listen-port={}", self.rpc_port),
-            // Note: rpc-secret is passed via conf-path to avoid exposure in process list
-            "--enable-rpc=true".to_string(),
-            "--rpc-listen-all=false".to_string(),
-            "--rpc-allow-origin-all=true".to_string(),
-            "--enable-dht=true".to_string(),
-            "--enable-dht6=true".to_string(),
-            "--enable-peer-exchange=true".to_string(),
-            "--bt-enable-lpd=true".to_string(),
-            "--follow-torrent=false".to_string(),
-            "--check-certificate=true".to_string(),
-            format!("--max-overall-download-limit={}", self.max_overall_download_limit),
-            format!("--max-overall-upload-limit={}", self.max_overall_upload_limit),
-            format!("--allow-overwrite={}", self.allow_overwrite),
-            format!("--auto-file-renaming={}", self.auto_file_renaming),
-            format!("--continue={}", self.continue_download),
-            format!("--bt-force-encryption={}", self.bt_force_encryption),
-            format!("--bt-require-crypto={}", self.bt_require_crypto),
-            format!("--pause-metadata={}", self.pause_metadata),
-            format!("--bt-save-metadata={}", self.bt_save_metadata),
-            format!("--bt-load-saved-metadata={}", self.bt_load_saved_metadata),
-            format!("--bt-remove-unselected-file={}", self.bt_remove_unselected_file),
-            format!("--bt-detach-seed-only={}", self.bt_detach_seed_only),
-            format!("--follow-metalink={}", self.follow_metalink),
-            format!("--enable-upnp={}", self.enable_upnp),
+    /// Generate ALL aria2 configuration lines for aria2.conf.
+    ///
+    /// Every setting is written to the conf file instead of being passed as CLI arguments.
+    /// This avoids Windows OS error 206 (filename too long) caused by excessive CLI arguments,
+    /// and keeps sensitive values (RPC secret, proxy password) out of the process list.
+    pub fn to_aria2_conf_lines(&self) -> Vec<String> {
+        let mut lines = vec![
+            format!("dir={}", self.download_dir.display()),
+            format!("max-concurrent-downloads={}", self.max_concurrent_downloads),
+            format!("max-connection-per-server={}", self.max_connection_per_server),
+            format!("split={}", self.split),
+            format!("min-split-size={}", self.min_split_size),
+            format!("max-download-limit={}", self.max_download_limit),
+            format!("max-upload-limit={}", self.max_upload_limit),
+            format!("listen-port={}", self.bt_listen_port),
+            format!("dht-listen-port={}", self.dht_listen_port),
+            format!("seed-ratio={}", self.seed_ratio),
+            format!("seed-time={}", self.seed_time),
+            format!("user-agent={}", self.user_agent),
+            format!("rpc-listen-port={}", self.rpc_port),
+            format!("rpc-secret={}", self.rpc_secret),
+            "enable-rpc=true".to_string(),
+            "rpc-listen-all=false".to_string(),
+            "rpc-allow-origin-all=true".to_string(),
+            "enable-dht=true".to_string(),
+            "enable-dht6=true".to_string(),
+            "enable-peer-exchange=true".to_string(),
+            "bt-enable-lpd=true".to_string(),
+            "follow-torrent=false".to_string(),
+            "check-certificate=true".to_string(),
+            format!("max-overall-download-limit={}", self.max_overall_download_limit),
+            format!("max-overall-upload-limit={}", self.max_overall_upload_limit),
+            format!("allow-overwrite={}", self.allow_overwrite),
+            format!("auto-file-renaming={}", self.auto_file_renaming),
+            format!("continue={}", self.continue_download),
+            format!("bt-force-encryption={}", self.bt_force_encryption),
+            format!("bt-require-crypto={}", self.bt_require_crypto),
+            format!("pause-metadata={}", self.pause_metadata),
+            format!("bt-save-metadata={}", self.bt_save_metadata),
+            format!("bt-load-saved-metadata={}", self.bt_load_saved_metadata),
+            format!("bt-remove-unselected-file={}", self.bt_remove_unselected_file),
+            format!("bt-detach-seed-only={}", self.bt_detach_seed_only),
+            format!("follow-metalink={}", self.follow_metalink),
+            format!("enable-upnp={}", self.enable_upnp),
         ];
 
         // Add proxy settings if enabled
@@ -238,29 +242,20 @@ impl AppConfig {
                 ProxyType::Https => format!("https://{}:{}", self.proxy_host, self.proxy_port),
                 ProxyType::Socks5 => format!("socks5://{}:{}", self.proxy_host, self.proxy_port),
             };
-            args.push(format!("--all-proxy={}", proxy_url));
+            lines.push(format!("all-proxy={}", proxy_url));
 
             if !self.proxy_username.is_empty() {
-                args.push(format!("--all-proxy-user={}", self.proxy_username));
+                lines.push(format!("all-proxy-user={}", self.proxy_username));
             }
-            // Note: proxy password is passed via conf-path to avoid exposure in process list
+            if !self.proxy_password.is_empty() {
+                lines.push(format!("all-proxy-passwd={}", self.proxy_password));
+            }
             if !self.no_proxy.is_empty() {
-                args.push(format!("--no-proxy={}", self.no_proxy));
+                lines.push(format!("no-proxy={}", self.no_proxy));
             }
         }
 
-        args
-    }
-
-    /// Convert config entries that should be persisted in aria2.conf
-    pub fn to_aria2_conf_lines(&self) -> Vec<String> {
-        let mut lines = vec![format!("rpc-secret={}", self.rpc_secret)];
-
-        if self.proxy_enabled && !self.proxy_password.is_empty() {
-            lines.push(format!("all-proxy-passwd={}", self.proxy_password));
-        }
-
-        // Tracker lists can become very large; keep them out of Windows spawn args.
+        // Tracker lists can become very large
         if !self.bt_tracker.is_empty() {
             lines.push(format!("bt-tracker={}", self.bt_tracker));
         }
@@ -274,25 +269,21 @@ mod tests {
     use super::AppConfig;
 
     #[test]
-    fn bt_tracker_is_not_passed_via_cli_args() {
-        let mut config = AppConfig::default();
-        config.bt_tracker = (0..512)
-            .map(|index| format!("udp://tracker{index}.example.com:6969/announce"))
-            .collect::<Vec<_>>()
-            .join(",");
+    fn all_settings_are_in_conf_lines() {
+        let config = AppConfig::default();
+        let lines = config.to_aria2_conf_lines();
 
-        let args = config.to_aria2_args();
-
-        assert!(
-            args.iter().all(|arg| !arg.starts_with("--bt-tracker=")),
-            "bt-tracker should be written to aria2.conf instead of CLI args"
-        );
+        // Core settings must appear in conf lines (not passed via CLI)
+        assert!(lines.iter().any(|l| l.starts_with("dir=")), "dir missing");
+        assert!(lines.iter().any(|l| l.starts_with("rpc-secret=")), "rpc-secret missing");
+        assert!(lines.iter().any(|l| l.starts_with("rpc-listen-port=")), "rpc-listen-port missing");
+        assert!(lines.iter().any(|l| l == "enable-rpc=true"), "enable-rpc missing");
+        assert!(lines.iter().any(|l| l.starts_with("user-agent=")), "user-agent missing");
     }
 
     #[test]
     fn bt_tracker_is_written_to_aria2_conf() {
         let mut config = AppConfig::default();
-        config.rpc_secret = "secret".to_string();
         config.bt_tracker = "udp://tracker.example.com:6969/announce".to_string();
 
         let lines = config.to_aria2_conf_lines();
@@ -303,5 +294,23 @@ mod tests {
                 .any(|line| line == "bt-tracker=udp://tracker.example.com:6969/announce"),
             "bt-tracker should be persisted in aria2.conf"
         );
+    }
+
+    #[test]
+    fn proxy_settings_are_in_conf_lines() {
+        let mut config = AppConfig::default();
+        config.proxy_enabled = true;
+        config.proxy_host = "127.0.0.1".to_string();
+        config.proxy_port = 7890;
+        config.proxy_username = "user".to_string();
+        config.proxy_password = "pass".to_string();
+        config.no_proxy = "localhost".to_string();
+
+        let lines = config.to_aria2_conf_lines();
+
+        assert!(lines.iter().any(|l| l == "all-proxy=http://127.0.0.1:7890"), "proxy URL missing");
+        assert!(lines.iter().any(|l| l == "all-proxy-user=user"), "proxy user missing");
+        assert!(lines.iter().any(|l| l == "all-proxy-passwd=pass"), "proxy password missing");
+        assert!(lines.iter().any(|l| l == "no-proxy=localhost"), "no-proxy missing");
     }
 }
