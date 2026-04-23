@@ -255,6 +255,13 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
     // _init_guard dropped here → INITIALIZING reset to false
 }
 
+/// Normalize path separators to forward slashes for aria2 compatibility.
+/// Aria2's config parser may interpret backslashes as escape sequences
+/// (e.g. \t → tab, \n → newline) causing parse failures on Windows.
+fn aria2_path(path: &std::path::Path) -> String {
+    path.display().to_string().replace('\\', "/")
+}
+
 /// Start aria2 process and spawn a watchdog to detect unexpected termination
 fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Result<()> {
     use tauri_plugin_shell::ShellExt;
@@ -280,18 +287,18 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
     // Write ALL configuration to aria2.conf to keep CLI args minimal.
     // This avoids Windows OS error 206 (filename too long) caused by excessive CLI arguments.
     let mut conf_lines = config.to_aria2_conf_lines();
-    conf_lines.push(format!("save-session={}", session_path.display()));
-    conf_lines.push(format!("input-file={}", session_path.display()));
+    conf_lines.push(format!("save-session={}", aria2_path(&session_path)));
+    conf_lines.push(format!("input-file={}", aria2_path(&session_path)));
     conf_lines.push("save-session-interval=10".to_string());
-    conf_lines.push(format!("dht-file-path={}", dht_path.display()));
-    conf_lines.push(format!("dht-file-path6={}", dht6_path.display()));
+    conf_lines.push(format!("dht-file-path={}", aria2_path(&dht_path)));
+    conf_lines.push(format!("dht-file-path6={}", aria2_path(&dht6_path)));
 
     let conf_path = app_data_dir.join("aria2.conf");
     std::fs::write(&conf_path, conf_lines.join("\n"))
         .map_err(|e| Error::Custom(format!("Failed to write aria2 conf: {}", e)))?;
 
     // Only pass --conf-path via CLI — everything else is in the conf file
-    let args = vec![format!("--conf-path={}", conf_path.display())];
+    let args = vec![format!("--conf-path={}", aria2_path(&conf_path))];
 
     let (mut rx, child) = shell
         .sidecar(ARIA2_SIDECAR_NAME)
