@@ -11,7 +11,7 @@ pub mod events;
 pub use client::Aria2Client;
 
 use crate::{Error, Result};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::RwLock;
@@ -36,6 +36,8 @@ static RECOVERING: AtomicBool = AtomicBool::new(false);
 
 /// Crash restart counter — caps restart attempts to prevent infinite loops
 static RESTART_COUNT: AtomicU32 = AtomicU32::new(0);
+/// Monotonic process lifecycle epoch used to ignore stale termination events.
+static PROCESS_EPOCH: AtomicU64 = AtomicU64::new(0);
 const MAX_RESTARTS: u32 = 3;
 const CLIENT_WAIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 const CLIENT_WAIT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
@@ -49,6 +51,18 @@ fn engine_is_busy() -> bool {
 
 fn should_attempt_recovery_restart() -> bool {
     !SHUTTING_DOWN.load(Ordering::SeqCst) && RECOVERING.load(Ordering::SeqCst)
+}
+
+fn process_epoch() -> u64 {
+    PROCESS_EPOCH.load(Ordering::SeqCst)
+}
+
+fn advance_process_epoch() -> u64 {
+    PROCESS_EPOCH.fetch_add(1, Ordering::SeqCst) + 1
+}
+
+fn should_ignore_termination_event(watchdog_epoch: u64) -> bool {
+    SHUTTING_DOWN.load(Ordering::SeqCst) || watchdog_epoch != process_epoch()
 }
 
 async fn wait_for_engine_idle_inner(
@@ -153,6 +167,9 @@ pub async fn shutdown_and_cleanup() {
         tracing::debug!("Shutdown already in progress, skipping duplicate call");
         return;
     }
+
+    let next_epoch = advance_process_epoch();
+    tracing::debug!("Advancing aria2 process epoch to {}", next_epoch);
 
     if let Ok(client) = get_client().await {
         let _ = client.save_session().await;
@@ -310,15 +327,20 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
     let mut process_guard = ARIA2_PROCESS.lock().unwrap();
     *process_guard = Some(child);
 
+    let watchdog_epoch = process_epoch();
+
     // Spawn process watchdog to detect unexpected termination and auto-restart
     let watchdog_app = app.clone();
     tokio::spawn(async move {
         while let Some(event) = rx.recv().await {
             match event {
                 tauri_plugin_shell::process::CommandEvent::Terminated(payload) => {
-                    // Use SeqCst to synchronize with shutdown_and_cleanup's swap
-                    if SHUTTING_DOWN.load(Ordering::SeqCst) {
-                        tracing::info!("Aria2 process terminated (intentional shutdown)");
+                    if should_ignore_termination_event(watchdog_epoch) {
+                        tracing::info!(
+                            "Aria2 process terminated for stale or intentional lifecycle (watchdog epoch {}, current epoch {})",
+                            watchdog_epoch,
+                            process_epoch()
+                        );
                         return;
                     }
                     let code = payload
@@ -330,7 +352,7 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
                         code
                     );
                     // Double-check after logging to avoid race with concurrent shutdown
-                    if SHUTTING_DOWN.load(Ordering::SeqCst) {
+                    if should_ignore_termination_event(watchdog_epoch) {
                         tracing::info!(
                             "Shutdown started during termination handling, aborting notification"
                         );
@@ -465,6 +487,7 @@ mod tests {
         INITIALIZING.store(false, Ordering::SeqCst);
         RECOVERING.store(false, Ordering::SeqCst);
         RESTART_COUNT.store(0, Ordering::SeqCst);
+        PROCESS_EPOCH.store(0, Ordering::SeqCst);
         let mut guard = ARIA2_CLIENT.write().await;
         *guard = None;
     }
@@ -605,6 +628,39 @@ mod tests {
         SHUTTING_DOWN.store(false, Ordering::SeqCst);
         RECOVERING.store(false, Ordering::SeqCst);
         assert!(!should_attempt_recovery_restart());
+
+        reset_test_state().await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn manual_restart_should_ignore_stale_termination_events() {
+        let _lock = TEST_MUTEX.lock().unwrap();
+        reset_test_state().await;
+
+        let original_epoch = process_epoch();
+        advance_process_epoch();
+
+        SHUTTING_DOWN.store(false, Ordering::SeqCst);
+        assert!(
+            should_ignore_termination_event(original_epoch),
+            "termination from the pre-restart process should be ignored once a new epoch starts"
+        );
+
+        reset_test_state().await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn current_process_termination_is_not_ignored_when_engine_is_running() {
+        let _lock = TEST_MUTEX.lock().unwrap();
+        reset_test_state().await;
+
+        let current_epoch = process_epoch();
+        SHUTTING_DOWN.store(false, Ordering::SeqCst);
+
+        assert!(
+            !should_ignore_termination_event(current_epoch),
+            "current process termination should still trigger recovery when not shutting down"
+        );
 
         reset_test_state().await;
     }

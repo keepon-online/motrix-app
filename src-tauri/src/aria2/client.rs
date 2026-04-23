@@ -37,6 +37,18 @@ struct RpcRequest {
     response_tx: oneshot::Sender<Result<Value>>,
 }
 
+fn normalize_aria2_options(options: Value) -> Value {
+    match options {
+        Value::Object(mut map) => {
+            if let Some(Value::String(dir)) = map.get_mut("dir") {
+                *dir = dir.replace('\\', "/");
+            }
+            Value::Object(map)
+        }
+        other => other,
+    }
+}
+
 impl Aria2Client {
     /// Mark the client as intentionally shutting down.
     /// This prevents the reconnection loop from retrying.
@@ -245,7 +257,7 @@ impl Aria2Client {
     pub async fn add_uri(&self, uris: Vec<String>, options: Option<Value>) -> Result<String> {
         let mut params = vec![json!(uris)];
         if let Some(opts) = options {
-            params.push(opts);
+            params.push(normalize_aria2_options(opts));
         }
         let result = self.call("addUri", params).await?;
         result
@@ -259,7 +271,7 @@ impl Aria2Client {
         let mut params = vec![json!(torrent)];
         params.push(json!([]));
         if let Some(opts) = options {
-            params.push(opts);
+            params.push(normalize_aria2_options(opts));
         }
         let result = self.call("addTorrent", params).await?;
         result
@@ -272,7 +284,7 @@ impl Aria2Client {
     pub async fn add_metalink(&self, metalink: &str, options: Option<Value>) -> Result<Value> {
         let mut params = vec![json!(metalink)];
         if let Some(opts) = options {
-            params.push(opts);
+            params.push(normalize_aria2_options(opts));
         }
         self.call("addMetalink", params).await
     }
@@ -322,7 +334,8 @@ impl Aria2Client {
 
     /// Change global options
     pub async fn change_global_option(&self, options: Value) -> Result<Value> {
-        self.call("changeGlobalOption", vec![options]).await
+        self.call("changeGlobalOption", vec![normalize_aria2_options(options)])
+            .await
     }
 
     /// Pause all active tasks
@@ -374,7 +387,8 @@ impl Aria2Client {
 
     /// Change task-specific options
     pub async fn change_option(&self, gid: &str, options: Value) -> Result<Value> {
-        self.call("changeOption", vec![json!(gid), options]).await
+        self.call("changeOption", vec![json!(gid), normalize_aria2_options(options)])
+            .await
     }
 
     /// Change task position in the waiting queue
@@ -401,4 +415,32 @@ struct RpcError {
     #[allow(dead_code)]
     code: i32,
     message: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_aria2_options;
+    use serde_json::json;
+
+    #[test]
+    fn normalizes_windows_dir_in_rpc_options() {
+        let options = json!({
+            "dir": r"C:\Users\alice\Downloads",
+            "header": ["Cookie: test\\value"],
+        });
+
+        let normalized = normalize_aria2_options(options);
+
+        assert_eq!(normalized["dir"], json!("C:/Users/alice/Downloads"));
+        assert_eq!(normalized["header"], json!(["Cookie: test\\value"]));
+    }
+
+    #[test]
+    fn leaves_non_object_rpc_options_unchanged() {
+        let options = json!(null);
+
+        let normalized = normalize_aria2_options(options.clone());
+
+        assert_eq!(normalized, options);
+    }
 }
