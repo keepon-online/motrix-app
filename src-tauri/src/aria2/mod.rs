@@ -310,8 +310,20 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
     conf_lines.push(format!("dht-file-path={}", aria2_path(&dht_path)));
     conf_lines.push(format!("dht-file-path6={}", aria2_path(&dht6_path)));
 
+    // Enable aria2c's own diagnostic log to capture startup errors
+    let log_path = app_data_dir.join("aria2.log");
+    conf_lines.push(format!("log={}", aria2_path(&log_path)));
+    conf_lines.push("log-level=warn".to_string());
+
     let conf_path = app_data_dir.join("aria2.conf");
-    std::fs::write(&conf_path, conf_lines.join("\n"))
+    let conf_content = conf_lines.join("\n");
+    tracing::info!(
+        "Writing aria2.conf ({} lines) to: {}",
+        conf_lines.len(),
+        aria2_path(&conf_path)
+    );
+    tracing::debug!("aria2.conf content:\n{}", conf_content);
+    std::fs::write(&conf_path, &conf_content)
         .map_err(|e| Error::Custom(format!("Failed to write aria2 conf: {}", e)))?;
 
     // Only pass --conf-path via CLI — everything else is in the conf file
@@ -428,7 +440,7 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
                 }
                 tauri_plugin_shell::process::CommandEvent::Stderr(line) => {
                     let text = String::from_utf8_lossy(&line);
-                    tracing::debug!("aria2c stderr: {}", text.trim_end());
+                    tracing::warn!("aria2c stderr: {}", text.trim_end());
                 }
                 _ => {}
             }
