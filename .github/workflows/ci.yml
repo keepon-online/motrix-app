@@ -83,9 +83,9 @@ jobs:
       - name: Run Node-based tests
         run: node --test tests/*.test.mjs
 
+      - name: Build frontend
+        run: npm run build
+
       - name: Run Rust tests
         run: cargo test
         working-directory: src-tauri
-
-      - name: Build frontend
-        run: npm run build
