@@ -13,6 +13,7 @@ src-tauri/gen/schemas/
 .idea/
 .vs/
 .vscode/
+.codex
 *.swp
 *.swo
 thumbs.db
