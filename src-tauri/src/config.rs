@@ -196,7 +196,12 @@ impl AppConfig {
     /// and keeps sensitive values (RPC secret, proxy password) out of the process list.
     pub fn to_aria2_conf_lines(&self) -> Vec<String> {
         let mut lines = vec![
-            format!("dir={}", self.download_dir.display().to_string().replace('\\', "/")),
+            format!(
+                "dir={}",
+                dunce::simplified(&self.download_dir)
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            ),
             format!("max-concurrent-downloads={}", self.max_concurrent_downloads),
             format!("max-connection-per-server={}", self.max_connection_per_server),
             format!("split={}", self.split),

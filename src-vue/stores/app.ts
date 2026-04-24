@@ -179,6 +179,10 @@ export const useAppStore = defineStore('app', () => {
   async function restartEngine() {
     try {
       await invoke('restart_engine')
+      const ready = await invoke<boolean>('wait_for_engine')
+      if (!ready) {
+        throw new Error('Engine did not become ready after restart')
+      }
       restartNeeded.value = false
     } catch (error) {
       console.error('Failed to restart engine:', error)

@@ -2390,6 +2390,7 @@ dependencies = [
  "base64 0.22.1",
  "core-foundation",
  "dirs 5.0.1",
+ "dunce",
  "futures-util",
  "igd-next",
  "open",

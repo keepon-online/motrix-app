@@ -539,11 +539,17 @@ pub async fn restart_engine(app: tauri::AppHandle) -> Result<()> {
     tracing::info!("Restarting aria2 engine...");
     aria2::shutdown_and_cleanup().await;
     aria2::wait_for_engine_idle().await?;
-    match aria2::init_engine(&app).await {
-        Ok(()) => Ok(()),
+    aria2::start_engine(&app).await
+}
+
+/// Wait for the aria2 engine to accept RPC connections after startup/restart.
+#[tauri::command]
+pub async fn wait_for_engine(app: tauri::AppHandle) -> Result<bool> {
+    match aria2::wait_for_engine(&app).await {
+        Ok(()) => Ok(true),
         Err(e) => {
             aria2::report_engine_failure(&app, &e.to_string());
-            Err(e)
+            Ok(false)
         }
     }
 }

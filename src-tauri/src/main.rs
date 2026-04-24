@@ -85,7 +85,13 @@ fn main() {
             // Initialize aria2 engine
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = aria2::init_engine(&app_handle).await {
+                if let Err(e) = aria2::start_engine(&app_handle).await {
+                    tracing::error!("Failed to start aria2 engine: {}", e);
+                    aria2::report_engine_failure(&app_handle, &e.to_string());
+                    return;
+                }
+
+                if let Err(e) = aria2::wait_for_engine(&app_handle).await {
                     tracing::error!("Failed to initialize aria2 engine: {}", e);
                     aria2::report_engine_failure(&app_handle, &e.to_string());
                     return;
@@ -152,6 +158,7 @@ fn main() {
             commands::reset_session,
             commands::factory_reset,
             commands::restart_engine,
+            commands::wait_for_engine,
             commands::get_directory_history,
             commands::add_directory_to_history,
             commands::toggle_directory_favorite,

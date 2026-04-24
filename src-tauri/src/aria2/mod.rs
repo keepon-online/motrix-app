@@ -11,6 +11,7 @@ pub mod events;
 pub use client::Aria2Client;
 
 use crate::{Error, Result};
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
@@ -38,11 +39,17 @@ static RECOVERING: AtomicBool = AtomicBool::new(false);
 static RESTART_COUNT: AtomicU32 = AtomicU32::new(0);
 /// Monotonic process lifecycle epoch used to ignore stale termination events.
 static PROCESS_EPOCH: AtomicU64 = AtomicU64::new(0);
+/// Epoch of the child process currently stored in `ARIA2_PROCESS`.
+static PROCESS_HANDLE_EPOCH: AtomicU64 = AtomicU64::new(0);
+/// True while the managed aria2c child process is still expected to be alive.
+static PROCESS_RUNNING: AtomicBool = AtomicBool::new(false);
 const MAX_RESTARTS: u32 = 3;
 const CLIENT_WAIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 const CLIENT_WAIT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
 const ENGINE_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 const ENGINE_IDLE_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
+const PROCESS_EXIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+const PROCESS_EXIT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
 const ARIA2_SIDECAR_NAME: &str = "motrix-aria2c";
 
 fn engine_is_busy() -> bool {
@@ -63,6 +70,25 @@ fn advance_process_epoch() -> u64 {
 
 fn should_ignore_termination_event(watchdog_epoch: u64) -> bool {
     SHUTTING_DOWN.load(Ordering::SeqCst) || watchdog_epoch != process_epoch()
+}
+
+fn process_is_running() -> bool {
+    PROCESS_RUNNING.load(Ordering::SeqCst)
+}
+
+fn clear_process_handle_for_epoch(handle_epoch: u64) {
+    if PROCESS_HANDLE_EPOCH.load(Ordering::SeqCst) != handle_epoch {
+        return;
+    }
+
+    let mut guard = ARIA2_PROCESS.lock().unwrap();
+    if PROCESS_HANDLE_EPOCH.load(Ordering::SeqCst) != handle_epoch {
+        return;
+    }
+
+    let _ = guard.take();
+    PROCESS_RUNNING.store(false, Ordering::SeqCst);
+    PROCESS_HANDLE_EPOCH.store(0, Ordering::SeqCst);
 }
 
 async fn wait_for_engine_idle_inner(
@@ -91,6 +117,62 @@ async fn wait_for_engine_idle_for_tests(
     poll_interval: std::time::Duration,
 ) -> Result<()> {
     wait_for_engine_idle_inner(timeout, poll_interval).await
+}
+
+async fn wait_for_process_exit_inner(
+    timeout: std::time::Duration,
+    poll_interval: std::time::Duration,
+) -> Result<()> {
+    let started = tokio::time::Instant::now();
+    while process_is_running() {
+        if started.elapsed() >= timeout {
+            return Err(Error::Custom("Timed out waiting for aria2c to exit".into()));
+        }
+        tokio::time::sleep(poll_interval).await;
+    }
+    Ok(())
+}
+
+async fn wait_for_process_exit() -> Result<()> {
+    wait_for_process_exit_inner(PROCESS_EXIT_TIMEOUT, PROCESS_EXIT_POLL_INTERVAL).await
+}
+
+#[cfg(test)]
+async fn wait_for_process_exit_for_tests(
+    timeout: std::time::Duration,
+    poll_interval: std::time::Duration,
+) -> Result<()> {
+    wait_for_process_exit_inner(timeout, poll_interval).await
+}
+
+async fn retry_with_backoff_inner<T, F, Fut>(
+    max_attempts: u32,
+    base_delay: std::time::Duration,
+    max_delay: std::time::Duration,
+    mut operation: F,
+) -> Result<T>
+where
+    F: FnMut(u32) -> Fut,
+    Fut: Future<Output = Result<T>>,
+{
+    let mut last_error: Option<Error> = None;
+
+    for attempt in 0..max_attempts {
+        match operation(attempt).await {
+            Ok(value) => return Ok(value),
+            Err(error) => {
+                last_error = Some(error);
+                if attempt + 1 == max_attempts {
+                    break;
+                }
+
+                let delay = std::cmp::min(base_delay.mul_f64(2f64.powi(attempt as i32)), max_delay);
+                tokio::time::sleep(delay).await;
+            }
+        }
+    }
+
+    Err(last_error.unwrap_or_else(|| Error::Custom("engine probe failed".into())))
 }
 
 pub fn report_engine_failure(app: &AppHandle, message: &str) {
@@ -157,6 +239,8 @@ pub(crate) async fn force_kill_process() {
         tracing::info!("Force killing aria2c child process");
         let _ = child.kill();
     }
+    PROCESS_RUNNING.store(false, Ordering::SeqCst);
+    PROCESS_HANDLE_EPOCH.store(0, Ordering::SeqCst);
 }
 
 /// Graceful shutdown: try RPC shutdown first, then force kill as fallback.
@@ -184,6 +268,14 @@ pub async fn shutdown_and_cleanup() {
         force_kill_process().await;
     }
 
+    if let Err(e) = wait_for_process_exit().await {
+        tracing::warn!(
+            "Timed out waiting for aria2c to exit cleanly, forcing process kill: {}",
+            e
+        );
+        force_kill_process().await;
+    }
+
     crate::upnp::unmap_all().await;
 
     let mut guard = ARIA2_CLIENT.write().await;
@@ -192,7 +284,7 @@ pub async fn shutdown_and_cleanup() {
 }
 
 /// Initialize aria2 engine
-pub async fn init_engine(app: &AppHandle) -> Result<()> {
+pub async fn start_engine(app: &AppHandle) -> Result<()> {
     use crate::config::AppConfig;
     use tauri_plugin_store::StoreExt;
 
@@ -203,15 +295,6 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
         ));
     }
 
-    // RAII guard: ensures INITIALIZING is reset on ALL exit paths (including panic/drop)
-    struct InitGuard;
-    impl Drop for InitGuard {
-        fn drop(&mut self) {
-            INITIALIZING.store(false, Ordering::SeqCst);
-        }
-    }
-    let _init_guard = InitGuard;
-
     SHUTTING_DOWN.store(false, Ordering::SeqCst);
     RECOVERING.store(false, Ordering::SeqCst);
     RESTART_COUNT.store(0, Ordering::SeqCst);
@@ -220,41 +303,61 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
     let config = AppConfig::load_from_store(&store);
 
     let port = config.rpc_port;
-    let secret = config.rpc_secret.clone();
 
     kill_orphaned_aria2c(port);
-    start_aria2_process(app, &config)?;
+    if let Err(error) = start_aria2_process(app, &config) {
+        INITIALIZING.store(false, Ordering::SeqCst);
+        return Err(error);
+    }
+    Ok(())
+}
 
-    let mut client = None;
-    for attempt in 1..=10 {
-        if SHUTTING_DOWN.load(Ordering::SeqCst) {
-            force_kill_process().await;
-            return Err(Error::Custom("Engine initialization cancelled".into()));
-        }
+pub async fn wait_for_engine(app: &AppHandle) -> Result<()> {
+    use crate::config::AppConfig;
+    use tauri_plugin_store::StoreExt;
 
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-        if SHUTTING_DOWN.load(Ordering::SeqCst) {
-            force_kill_process().await;
-            return Err(Error::Custom("Engine initialization cancelled".into()));
-        }
-
-        match Aria2Client::new(app.clone(), port, secret.clone()).await {
-            Ok(c) => {
-                client = Some(c);
-                break;
-            }
-            Err(e) => {
-                tracing::warn!("Aria2 connection attempt {}/10 failed: {}", attempt, e);
-                if attempt == 10 {
-                    // Clean up the child process we started — it's useless without a client
-                    force_kill_process().await;
-                    return Err(e);
-                }
-            }
+    struct InitGuard;
+    impl Drop for InitGuard {
+        fn drop(&mut self) {
+            INITIALIZING.store(false, Ordering::SeqCst);
         }
     }
-    let client = Arc::new(client.expect("aria2 client should be initialized after retry loop"));
+    let _init_guard = InitGuard;
+
+    let store = app.store("config.json")?;
+    let config = AppConfig::load_from_store(&store);
+    let port = config.rpc_port;
+    let secret = config.rpc_secret.clone();
+
+    let client = match retry_with_backoff_inner(
+        5,
+        std::time::Duration::from_millis(200),
+        std::time::Duration::from_secs(3),
+        |attempt| {
+            let app = app.clone();
+            let secret = secret.clone();
+            async move {
+                if SHUTTING_DOWN.load(Ordering::SeqCst) {
+                    force_kill_process().await;
+                    return Err(Error::Custom("Engine initialization cancelled".into()));
+                }
+
+                let result = Aria2Client::new(app, port, secret).await.map(Arc::new);
+                if let Err(ref e) = result {
+                    tracing::warn!("Aria2 connection attempt {}/5 failed: {}", attempt + 1, e);
+                }
+                result
+            }
+        },
+    )
+    .await
+    {
+        Ok(client) => client,
+        Err(error) => {
+            force_kill_process().await;
+            return Err(error);
+        }
+    };
 
     let mut guard = ARIA2_CLIENT.write().await;
     *guard = Some(client);
@@ -269,14 +372,19 @@ pub async fn init_engine(app: &AppHandle) -> Result<()> {
 
     let _ = app.emit("aria2-ready", ());
     Ok(())
-    // _init_guard dropped here → INITIALIZING reset to false
+}
+
+/// Initialize aria2 engine
+pub async fn init_engine(app: &AppHandle) -> Result<()> {
+    start_engine(app).await?;
+    wait_for_engine(app).await
 }
 
 /// Normalize path separators to forward slashes for aria2 compatibility.
 /// Aria2's config parser may interpret backslashes as escape sequences
 /// (e.g. \t → tab, \n → newline) causing parse failures on Windows.
 fn aria2_path(path: &std::path::Path) -> String {
-    path.display().to_string().replace('\\', "/")
+    dunce::simplified(path).to_string_lossy().replace('\\', "/")
 }
 
 /// Start aria2 process and spawn a watchdog to detect unexpected termination
@@ -338,8 +446,9 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
 
     let mut process_guard = ARIA2_PROCESS.lock().unwrap();
     *process_guard = Some(child);
-
     let watchdog_epoch = process_epoch();
+    PROCESS_HANDLE_EPOCH.store(watchdog_epoch, Ordering::SeqCst);
+    PROCESS_RUNNING.store(true, Ordering::SeqCst);
 
     // Spawn process watchdog to detect unexpected termination and auto-restart
     let watchdog_app = app.clone();
@@ -347,6 +456,8 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
         while let Some(event) = rx.recv().await {
             match event {
                 tauri_plugin_shell::process::CommandEvent::Terminated(payload) => {
+                    clear_process_handle_for_epoch(watchdog_epoch);
+
                     if should_ignore_termination_event(watchdog_epoch) {
                         tracing::info!(
                             "Aria2 process terminated for stale or intentional lifecycle (watchdog epoch {}, current epoch {})",
@@ -500,6 +611,8 @@ mod tests {
         RECOVERING.store(false, Ordering::SeqCst);
         RESTART_COUNT.store(0, Ordering::SeqCst);
         PROCESS_EPOCH.store(0, Ordering::SeqCst);
+        PROCESS_HANDLE_EPOCH.store(0, Ordering::SeqCst);
+        PROCESS_RUNNING.store(false, Ordering::SeqCst);
         let mut guard = ARIA2_CLIENT.write().await;
         *guard = None;
     }
@@ -675,5 +788,127 @@ mod tests {
         );
 
         reset_test_state().await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn wait_for_process_exit_blocks_until_process_stops() {
+        let _lock = TEST_MUTEX.lock().unwrap();
+        reset_test_state().await;
+        PROCESS_RUNNING.store(true, Ordering::SeqCst);
+
+        let release = tokio::spawn(async {
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            PROCESS_RUNNING.store(false, Ordering::SeqCst);
+        });
+
+        let result = timeout(
+            Duration::from_millis(120),
+            wait_for_process_exit_for_tests(Duration::from_millis(200), Duration::from_millis(10)),
+        )
+        .await
+        .expect("wait_for_process_exit should complete once process stops");
+
+        assert!(result.is_ok(), "wait_for_process_exit should succeed after process stops");
+
+        release.await.expect("release task should complete");
+        reset_test_state().await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn wait_for_process_exit_times_out_when_process_keeps_running() {
+        let _lock = TEST_MUTEX.lock().unwrap();
+        reset_test_state().await;
+        PROCESS_RUNNING.store(true, Ordering::SeqCst);
+
+        let result =
+            wait_for_process_exit_for_tests(Duration::from_millis(20), Duration::from_millis(5))
+                .await;
+
+        match result {
+            Err(Error::Custom(message)) => {
+                assert_eq!(message, "Timed out waiting for aria2c to exit");
+            }
+            Ok(()) => panic!("wait_for_process_exit unexpectedly succeeded"),
+            Err(other) => panic!("wait_for_process_exit returned unexpected error: {other}"),
+        }
+
+        reset_test_state().await;
+    }
+
+    #[test]
+    fn aria2_path_strips_windows_extended_prefix() {
+        let path = std::path::Path::new(r"\\?\C:\Users\test\AppData\Local\Motrix\aria2.conf");
+        let result = aria2_path(path);
+
+        #[cfg(target_os = "windows")]
+        {
+            assert_eq!(result, "C:/Users/test/AppData/Local/Motrix/aria2.conf");
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert!(!result.is_empty());
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn retry_with_backoff_succeeds_after_transient_failures() {
+        let _lock = TEST_MUTEX.lock().unwrap();
+        let attempts = Arc::new(AtomicU32::new(0));
+        let attempts_for_retry = attempts.clone();
+
+        let result = retry_with_backoff_inner(
+            5,
+            Duration::from_millis(1),
+            Duration::from_millis(2),
+            move |_| {
+                let attempts = attempts_for_retry.clone();
+                async move {
+                    let current = attempts.fetch_add(1, Ordering::SeqCst);
+                    if current < 2 {
+                        Err(Error::Custom("not ready yet".into()))
+                    } else {
+                        Ok("ready")
+                    }
+                }
+            },
+        )
+        .await;
+
+        match result {
+            Ok(value) => assert_eq!(value, "ready"),
+            Err(other) => panic!("retry_with_backoff_inner returned unexpected error: {other}"),
+        }
+
+        assert_eq!(attempts.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn retry_with_backoff_returns_last_error_after_max_attempts() {
+        let _lock = TEST_MUTEX.lock().unwrap();
+        let attempts = Arc::new(AtomicU32::new(0));
+        let attempts_for_retry = attempts.clone();
+
+        let result: Result<&'static str> = retry_with_backoff_inner(
+            3,
+            Duration::from_millis(1),
+            Duration::from_millis(2),
+            move |_| {
+                let attempts = attempts_for_retry.clone();
+                async move {
+                    attempts.fetch_add(1, Ordering::SeqCst);
+                    Err(Error::Custom("still down".into()))
+                }
+            },
+        )
+        .await;
+
+        match result {
+            Err(Error::Custom(message)) => assert_eq!(message, "still down"),
+            Ok(_) => panic!("retry_with_backoff_inner unexpectedly succeeded"),
+            Err(other) => panic!("retry_with_backoff_inner returned unexpected error: {other}"),
+        }
+
+        assert_eq!(attempts.load(Ordering::SeqCst), 3);
     }
 }
