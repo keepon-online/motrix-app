@@ -229,7 +229,24 @@ jobs:
             Write-Error "Sidecar is empty: $sidecar"
             exit 1
           }
-          Write-Host "Sidecar verified: $sidecar ($size bytes)"
+          # Verify it is a valid PE executable
+          $header = [System.Text.Encoding]::ASCII.GetString((Get-Content $sidecar -AsByteStream -TotalCount 2))
+          if ($header -ne 'MZ') {
+            Write-Error "Sidecar is not a valid PE executable (expected MZ header, got: $header)"
+            exit 1
+          }
+          Write-Host "Sidecar verified: $sidecar ($size bytes, valid PE)"
+          # Execute version check to verify binary works (no DLL missing, no launch error)
+          try {
+            & $sidecar --version 2>&1 | ForEach-Object { Write-Host "aria2c: $_" }
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Sidecar version check returned exit code $LASTEXITCODE"
+              exit 1
+            }
+          } catch {
+            Write-Error "Sidecar failed to execute: $_"
+            exit 1
+          }
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0

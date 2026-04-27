@@ -33,6 +33,17 @@ export async function validateSidecar(sidecarPath) {
   if (header.includes('MOTRIX_SIDECAR_PLACEHOLDER')) {
     throw new Error(`Aria2 sidecar is still the repository placeholder: ${sidecarPath}`)
   }
+
+  // On Windows, verify the PE signature to catch corrupted downloads or HTML
+  // error pages that were saved instead of the actual binary
+  if (process.platform === 'win32') {
+    const buf = await fs.readFile(sidecarPath)
+    if (buf[0] !== 0x4d || buf[1] !== 0x5a) {
+      throw new Error(
+        `Aria2 sidecar is not a valid Windows executable (expected MZ header): ${sidecarPath}`
+      )
+    }
+  }
 }
 
 function detectTargetTriple(env = process.env) {

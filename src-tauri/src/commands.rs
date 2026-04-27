@@ -478,6 +478,7 @@ pub async fn get_engine_paths(app: tauri::AppHandle) -> Result<Value> {
         "appDataDir": app_data_dir.display().to_string(),
         "aria2Config": app_data_dir.join("aria2.conf").display().to_string(),
         "aria2Session": app_data_dir.join("aria2.session").display().to_string(),
+        "aria2Log": app_data_dir.join("aria2.log").display().to_string(),
         "appLogDir": log_dir.display().to_string(),
     }))
 }

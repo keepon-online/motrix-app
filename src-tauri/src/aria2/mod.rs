@@ -185,10 +185,13 @@ pub fn report_engine_failure(app: &AppHandle, message: &str) {
 fn kill_orphaned_aria2c(port: u16) {
     #[cfg(target_os = "windows")]
     {
+        // Match any netstat line containing the port. We intentionally avoid filtering
+        // by "LISTENING" because netstat output may be localized on non-English Windows.
+        // The PID is always the last whitespace-separated column.
         let output = std::process::Command::new("cmd")
             .args([
                 "/C",
-                &format!("netstat -ano | findstr \"LISTENING\" | findstr \":{port}\""),
+                &format!("netstat -ano | findstr \":{port}\""),
             ])
             .output();
         if let Ok(output) = output {
@@ -309,6 +312,22 @@ pub async fn start_engine(app: &AppHandle) -> Result<()> {
         INITIALIZING.store(false, Ordering::SeqCst);
         return Err(error);
     }
+
+    // Brief post-spawn liveness check: wait 1s then verify the process survived.
+    // Aria2c that exits immediately (conf parse error, missing DLL, port conflict)
+    // would otherwise only be diagnosed after the WebSocket retry loop times out.
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    if !process_is_running() {
+        INITIALIZING.store(false, Ordering::SeqCst);
+        return Err(Error::Custom(
+            "Aria2c exited immediately after spawning. \
+             Check the aria2.conf for invalid paths, port conflicts, or missing DLLs. \
+             See aria2.log in the app data directory for details."
+                .into(),
+        ));
+    }
+
+    tracing::info!("Aria2 process passed post-spawn liveness check");
     Ok(())
 }
 
@@ -400,6 +419,25 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
     std::fs::create_dir_all(&app_data_dir)
         .map_err(|e| Error::Custom(format!("Failed to create app data dir: {}", e)))?;
 
+    // Verify the download directory exists (or can be created) before spawning
+    // aria2c.  Aria2 exits immediately when the configured dir path is unusable,
+    // and the error from aria2c stderr may not surface the root cause clearly.
+    let download_dir = dunce::simplified(&config.download_dir);
+    if !download_dir.exists() {
+        std::fs::create_dir_all(&download_dir).map_err(|e| {
+            Error::Custom(format!(
+                "Download directory does not exist and could not be created: {} ({})",
+                download_dir.display(),
+                e
+            ))
+        })?;
+    } else if !download_dir.is_dir() {
+        return Err(Error::Custom(format!(
+            "Download path is not a directory: {}",
+            download_dir.display()
+        )));
+    }
+
     let session_path = app_data_dir.join("aria2.session");
     if !session_path.exists() {
         std::fs::File::create(&session_path)
@@ -444,11 +482,16 @@ fn start_aria2_process(app: &AppHandle, config: &crate::config::AppConfig) -> Re
         .spawn()
         .map_err(|e| Error::Custom(format!("Failed to spawn aria2c: {}", e)))?;
 
-    let mut process_guard = ARIA2_PROCESS.lock().unwrap();
-    *process_guard = Some(child);
-    let watchdog_epoch = process_epoch();
-    PROCESS_HANDLE_EPOCH.store(watchdog_epoch, Ordering::SeqCst);
-    PROCESS_RUNNING.store(true, Ordering::SeqCst);
+    tracing::info!("Aria2 sidecar spawned (name: {})", ARIA2_SIDECAR_NAME);
+
+    let watchdog_epoch;
+    {
+        let mut process_guard = ARIA2_PROCESS.lock().unwrap();
+        *process_guard = Some(child);
+        watchdog_epoch = process_epoch();
+        PROCESS_HANDLE_EPOCH.store(watchdog_epoch, Ordering::SeqCst);
+        PROCESS_RUNNING.store(true, Ordering::SeqCst);
+    } // MutexGuard dropped before any .await to keep the future Send
 
     // Spawn process watchdog to detect unexpected termination and auto-restart
     let watchdog_app = app.clone();

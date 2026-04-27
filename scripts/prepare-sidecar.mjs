@@ -156,12 +156,26 @@ async function prepareFromSource({ repoRoot, targetTriple, version, sidecarPath 
   await fs.chmod(sidecarPath, 0o755)
 }
 
+async function findAria2cInDir(dirPath) {
+  const entries = await fs.readdir(dirPath, { withFileTypes: true })
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name)
+    if (entry.isFile() && entry.name === 'aria2c.exe') {
+      return fullPath
+    }
+    if (entry.isDirectory()) {
+      const found = await findAria2cInDir(fullPath)
+      if (found) return found
+    }
+  }
+  return null
+}
+
 async function prepareFromWindowsArchive({ repoRoot, version, sidecarPath }) {
   const downloadDir = path.join(repoRoot, '.sidecar-cache')
   const archiveName = `aria2-${version}-win-64bit-build1.zip`
   const archivePath = path.join(downloadDir, archiveName)
   const extractDir = path.join(downloadDir, `aria2-${version}-win-64bit-build1`)
-  const extractedBinary = path.join(extractDir, `aria2-${version}-win-64bit-build1`, 'aria2c.exe')
 
   await ensureDir(downloadDir)
 
@@ -169,6 +183,7 @@ async function prepareFromWindowsArchive({ repoRoot, version, sidecarPath }) {
     await runCommand('curl', ['-fSL', getWindowsArchiveUrl(version), '-o', archivePath], { cwd: repoRoot })
   }
 
+  let extractedBinary = path.join(extractDir, `aria2-${version}-win-64bit-build1`, 'aria2c.exe')
   if (!(await exists(extractedBinary))) {
     if (process.platform === 'win32') {
       await runCommand('powershell', [
@@ -179,6 +194,10 @@ async function prepareFromWindowsArchive({ repoRoot, version, sidecarPath }) {
     } else {
       await runCommand('tar', ['-xf', archivePath, '-C', extractDir], { cwd: repoRoot })
     }
+
+    // Search for aria2c.exe in the extracted tree (zip structure varies per release)
+    const found = await findAria2cInDir(extractDir)
+    if (found) extractedBinary = found
   }
 
   await validateSidecar(extractedBinary)
