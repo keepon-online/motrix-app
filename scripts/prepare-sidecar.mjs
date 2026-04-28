@@ -101,15 +101,17 @@ async function tryReuseSystemAria2c(sidecarPath) {
 
   for (const candidate of candidates) {
     try {
-      await runCommand(candidate, ['--version'], { stdio: 'ignore' })
       const sourcePath = process.platform === 'win32'
         ? execFileSync('where', [candidate], { encoding: 'utf8' }).split(/\r?\n/).find(Boolean)
         : execFileSync('which', [candidate], { encoding: 'utf8' }).trim()
-      if (!(await exists(sourcePath))) continue
+      if (!sourcePath || !(await exists(sourcePath))) continue
 
       await fs.copyFile(sourcePath, sidecarPath)
       await fs.chmod(sidecarPath, 0o755)
       await validateSidecar(sidecarPath)
+      // Verify the copied binary works from its new location — some system
+      // aria2c installations are launchers that only work in their original directory
+      await runCommand(sidecarPath, ['--version'], { stdio: 'ignore' })
       return true
     } catch {
       // fall through to bundled build/download
