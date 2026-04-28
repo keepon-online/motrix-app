@@ -312,22 +312,6 @@ pub async fn start_engine(app: &AppHandle) -> Result<()> {
         INITIALIZING.store(false, Ordering::SeqCst);
         return Err(error);
     }
-
-    // Brief post-spawn liveness check: wait 1s then verify the process survived.
-    // Aria2c that exits immediately (conf parse error, missing DLL, port conflict)
-    // would otherwise only be diagnosed after the WebSocket retry loop times out.
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    if !process_is_running() {
-        INITIALIZING.store(false, Ordering::SeqCst);
-        return Err(Error::Custom(
-            "Aria2c exited immediately after spawning. \
-             Check the aria2.conf for invalid paths, port conflicts, or missing DLLs. \
-             See aria2.log in the app data directory for details."
-                .into(),
-        ));
-    }
-
-    tracing::info!("Aria2 process passed post-spawn liveness check");
     Ok(())
 }
 
