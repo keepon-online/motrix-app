@@ -89,3 +89,35 @@ jobs:
       - name: Run Rust tests
         run: cargo test
         working-directory: src-tauri
+
+      - name: Setup Windows Rust target
+        run: rustup target add x86_64-pc-windows-gnu
+
+      - name: Install mingw-w64 (Windows cross-linker)
+        run: sudo apt-get install -y mingw-w64
+
+      - name: Check Rust compilation for Windows
+        run: cargo check --target x86_64-pc-windows-gnu
+        working-directory: src-tauri
+
+      - name: Cache Windows aria2 sidecar
+        uses: actions/cache@v5
+        with:
+          path: .sidecar-cache
+          key: aria2-${{ env.ARIA2_VERSION }}-windows-x86_64-pc-windows-gnu
+          restore-keys: |
+            aria2-${{ env.ARIA2_VERSION }}-windows-
+
+      - name: Prepare Windows aria2c sidecar
+        env:
+          TARGET_TRIPLE: x86_64-pc-windows-gnu
+          MOTRIX_ARIA2_VERSION: ${{ env.ARIA2_VERSION }}
+        run: node scripts/prepare-sidecar.mjs
+
+      - name: Verify Windows aria2c sidecar
+        run: |
+          SIDECAR="src-tauri/binaries/motrix-aria2c-x86_64-pc-windows-gnu.exe"
+          test -f "$SIDECAR" || { echo "::error::Windows sidecar not found: $SIDECAR"; exit 1; }
+          test -s "$SIDECAR" || { echo "::error::Windows sidecar is empty: $SIDECAR"; exit 1; }
+          file "$SIDECAR"
+          echo "Windows sidecar verified: $(ls -lh "$SIDECAR")"
