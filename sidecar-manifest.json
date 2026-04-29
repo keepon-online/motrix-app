@@ -184,6 +184,8 @@
       "configureEnv": {},
       "requiredBuildTools": ["autoreconf", "make", "pkg-config"],
       "validation": {
+        "format": "macho",
+        "arch": "arm64",
         "runVersion": true
       }
     },
@@ -197,6 +199,8 @@
       "configureEnv": {},
       "requiredBuildTools": ["autoreconf", "make", "pkg-config"],
       "validation": {
+        "format": "macho",
+        "arch": "x86_64",
         "runVersion": true
       }
     }

@@ -37,11 +37,86 @@ function isLinuxTarget(targetTriple) {
   return targetTriple?.includes('linux') ?? false
 }
 
+function isMacosTarget(targetTriple) {
+  return targetTriple?.includes('apple-darwin') ?? false
+}
+
 export function parseNeededLibraries(output) {
   return output
     .split(/\r?\n/)
     .map((line) => line.match(/^\s*NEEDED\s+(\S+)/)?.[1])
     .filter(Boolean)
+}
+
+function detectMachOEndian(prefix) {
+  const magicBigEndian = prefix.readUInt32BE(0)
+  const magicLittleEndian = prefix.readUInt32LE(0)
+
+  if (magicBigEndian === 0xcafebabe || magicBigEndian === 0xcafebabf) {
+    return { format: 'fat', endian: 'be', magic: magicBigEndian }
+  }
+
+  if (magicLittleEndian === 0xfeedface || magicLittleEndian === 0xfeedfacf) {
+    return { format: 'thin', endian: 'le', magic: magicLittleEndian }
+  }
+
+  if (magicBigEndian === 0xfeedface || magicBigEndian === 0xfeedfacf) {
+    return { format: 'thin', endian: 'be', magic: magicBigEndian }
+  }
+
+  return null
+}
+
+function readUint32(prefix, offset, endian) {
+  return endian === 'be'
+    ? prefix.readUInt32BE(offset)
+    : prefix.readUInt32LE(offset)
+}
+
+function parseMachOCpuTypes(prefix) {
+  if (prefix.length < 8) {
+    return []
+  }
+
+  const header = detectMachOEndian(prefix)
+  if (!header) {
+    return []
+  }
+
+  if (header.format === 'thin') {
+    return [readUint32(prefix, 4, header.endian)]
+  }
+
+  const archCount = readUint32(prefix, 4, header.endian)
+  const archSize = header.magic === 0xcafebabf ? 32 : 20
+  const cpuTypes = []
+  let offset = 8
+
+  for (let index = 0; index < archCount; index += 1) {
+    if (prefix.length < offset + 4) {
+      break
+    }
+    cpuTypes.push(readUint32(prefix, offset, header.endian))
+    offset += archSize
+  }
+
+  return cpuTypes
+}
+
+function expectedMacosCpuType(targetTriple, validation = {}) {
+  const arch = validation.arch
+    ?? (targetTriple?.startsWith('x86_64-') ? 'x86_64' : null)
+    ?? (targetTriple?.startsWith('aarch64-') ? 'arm64' : null)
+
+  if (arch === 'x86_64') return 0x01000007
+  if (arch === 'arm64') return 0x0100000c
+  return null
+}
+
+function describeMacosArch(cpuType) {
+  if (cpuType === 0x01000007) return 'x86_64'
+  if (cpuType === 0x0100000c) return 'arm64'
+  return `cpu-type-${cpuType}`
 }
 
 function validateLinuxPortability(sidecarPath) {
@@ -115,6 +190,23 @@ export async function validateSidecar(sidecarPath, {
 
     if (requirePortableLinux || validation.portableLinux) {
       validateLinuxPortability(sidecarPath)
+    }
+  }
+
+  if (validation.format === 'macho' || isMacosTarget(targetTriple)) {
+    const cpuTypes = parseMachOCpuTypes(prefix)
+    if (cpuTypes.length === 0) {
+      throw new Error(
+        `Aria2 sidecar is not a valid macOS executable (expected Mach-O header): ${sidecarPath}`
+      )
+    }
+
+    const expectedCpuType = expectedMacosCpuType(targetTriple, validation)
+    if (expectedCpuType !== null && !cpuTypes.includes(expectedCpuType)) {
+      const actualArchitectures = cpuTypes.map((cpuType) => describeMacosArch(cpuType)).join(', ')
+      throw new Error(
+        `Aria2 sidecar has the wrong macOS architecture for ${targetTriple}: expected ${describeMacosArch(expectedCpuType)}, got ${actualArchitectures || 'unknown'}.`
+      )
     }
   }
 }

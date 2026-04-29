@@ -58,6 +58,50 @@ test('validateSidecar validates Windows targets even when host is not Windows', 
   )
 })
 
+test('validateSidecar rejects non-Mach-O binaries for macOS targets', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'motrix-sidecar-test-'))
+  const sidecarPath = path.join(tempDir, 'motrix-aria2c-x86_64-apple-darwin')
+  await fs.writeFile(sidecarPath, Buffer.from([0x7f, 0x45, 0x4c, 0x46]))
+
+  await assert.rejects(
+    sidecarModule.validateSidecar(sidecarPath, {
+      targetTriple: 'x86_64-apple-darwin',
+    }),
+    /valid macOS executable/,
+  )
+})
+
+test('validateSidecar rejects Mach-O binaries with the wrong macOS architecture', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'motrix-sidecar-test-'))
+  const sidecarPath = path.join(tempDir, 'motrix-aria2c-x86_64-apple-darwin')
+  const machO = Buffer.alloc(32)
+  machO.writeUInt32LE(0xfeedfacf, 0)
+  machO.writeUInt32LE(0x0100000c, 4)
+  await fs.writeFile(sidecarPath, machO)
+
+  await assert.rejects(
+    sidecarModule.validateSidecar(sidecarPath, {
+      targetTriple: 'x86_64-apple-darwin',
+    }),
+    /expected x86_64/,
+  )
+})
+
+test('validateSidecar accepts Mach-O binaries matching the macOS target architecture', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'motrix-sidecar-test-'))
+  const sidecarPath = path.join(tempDir, 'motrix-aria2c-x86_64-apple-darwin')
+  const machO = Buffer.alloc(32)
+  machO.writeUInt32LE(0xfeedfacf, 0)
+  machO.writeUInt32LE(0x01000007, 4)
+  await fs.writeFile(sidecarPath, machO)
+
+  await assert.doesNotReject(
+    sidecarModule.validateSidecar(sidecarPath, {
+      targetTriple: 'x86_64-apple-darwin',
+    }),
+  )
+})
+
 test('parseNeededLibraries extracts ELF NEEDED entries', () => {
   const output = `
 Dynamic Section:

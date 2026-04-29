@@ -92,6 +92,17 @@ test('manifest keeps Linux source build as an explicit fallback path only', () =
   )
 })
 
+test('manifest pins macOS validation to Mach-O format and target architecture', () => {
+  const manifest = manifestModule.loadSidecarManifest(process.cwd())
+  const armTarget = manifestModule.getSidecarTarget(manifest, 'aarch64-apple-darwin')
+  const intelTarget = manifestModule.getSidecarTarget(manifest, 'x86_64-apple-darwin')
+
+  assert.equal(armTarget.validation.format, 'macho')
+  assert.equal(armTarget.validation.arch, 'arm64')
+  assert.equal(intelTarget.validation.format, 'macho')
+  assert.equal(intelTarget.validation.arch, 'x86_64')
+})
+
 test('manifest keeps upstream windows archive only as an explicit fallback source', () => {
   const manifest = manifestModule.loadSidecarManifest(process.cwd())
   const windowsTarget = manifestModule.getSidecarTarget(
