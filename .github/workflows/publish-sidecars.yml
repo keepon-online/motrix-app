@@ -37,7 +37,7 @@ jobs:
         run: node scripts/check-sidecar.mjs
 
       - name: Upload Linux sidecar artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-sidecar
           path: src-tauri/binaries/motrix-aria2c-x86_64-unknown-linux-gnu
@@ -77,7 +77,7 @@ jobs:
         run: node scripts/check-sidecar.mjs
 
       - name: Upload macOS sidecar artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target }}-sidecar
           path: src-tauri/binaries/motrix-aria2c-${{ matrix.target }}
@@ -111,7 +111,7 @@ jobs:
         run: node scripts/check-sidecar.mjs
 
       - name: Upload Windows sidecar artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target }}-sidecar
           path: src-tauri/binaries/motrix-aria2c-${{ matrix.target }}.exe
@@ -128,7 +128,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download sidecar artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: release-assets
           merge-multiple: true
@@ -163,7 +163,7 @@ jobs:
         run: node scripts/sync-sidecar-release-sha.mjs release-assets/SHA256SUMS.txt
 
       - name: Upload updated manifest artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: updated-sidecar-manifest
           path: sidecar-manifest.json
