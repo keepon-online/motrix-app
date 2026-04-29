@@ -150,11 +150,14 @@ test('linux docker build command is pinned to the manifest image and target', ()
   const command = prepareModule.getLinuxDockerBuildCommand(
     '/repo',
     'x86_64-unknown-linux-gnu',
+    undefined,
+    { MOTRIX_SIDECAR_REGENERATE: '1' },
   )
 
   assert.equal(command.command, 'docker')
   assert.ok(command.args.includes('node:22-bullseye'))
   assert.ok(command.args.includes('TARGET_TRIPLE=x86_64-unknown-linux-gnu'))
+  assert.ok(command.args.includes('MOTRIX_SIDECAR_REGENERATE=1'))
   assert.ok(command.args.includes('LIBSSH2_LIBS=-lssh2 -lgcrypt -lgpg-error -lz'))
   assert.ok(command.args.some((arg) => arg.includes('/repo:/workspace')))
 })

@@ -474,6 +474,7 @@ export function getLinuxDockerBuildCommand(
   repoRoot,
   targetTriple,
   manifest = defaultManifest,
+  env = process.env,
 ) {
   const target = getTargetConfig(targetTriple, manifest)
   const dockerBuild = target.dockerBuild
@@ -486,6 +487,9 @@ export function getLinuxDockerBuildCommand(
     '-e',
     `${key}=${value}`,
   ])
+  const passthroughEnvArgs = ['MOTRIX_SIDECAR_REGENERATE', 'MOTRIX_SIDECAR_BUILD_FROM_SOURCE']
+    .filter((key) => env[key] !== undefined)
+    .flatMap((key) => ['-e', `${key}=${env[key]}`])
   const innerCommand = [
     'apt-get update',
     `apt-get install -y ${installPackages}`,
@@ -507,6 +511,7 @@ export function getLinuxDockerBuildCommand(
       'MOTRIX_SIDECAR_USE_DOCKER=0',
       '-e',
       'MOTRIX_SIDECAR_IN_DOCKER=1',
+      ...passthroughEnvArgs,
       ...dockerEnvArgs,
       dockerBuild.image,
       'bash',
