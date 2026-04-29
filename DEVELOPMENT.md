@@ -159,7 +159,7 @@ sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev
 # 1. 安装前端依赖
 npm install
 
-# 2. 准备 aria2c sidecar（优先复用本机可用 aria2c，否则自动下载/构建）
+# 2. 准备 aria2c sidecar（默认下载仓库预编译制品并校验）
 npm run sidecar:prepare
 
 # 3. 启动开发模式
@@ -172,11 +172,34 @@ npm run tauri:dev
 |------|------|
 | `npm run dev` | 仅启动前端 Vite 开发服务器 (localhost:1420) |
 | `npm run build` | TypeScript 检查 + Vite 前端构建 |
-| `npm run sidecar:prepare` | 为当前目标自动准备真实的 aria2c sidecar |
+| `npm run sidecar:prepare` | 按 `sidecar-manifest.json` 为当前目标准备 aria2c sidecar |
+| `npm run sidecar:check` | 按 manifest 规则校验已准备的 sidecar |
 | `npm run tauri:dev` | 完整 Tauri 开发模式 (前端+后端+HMR) |
 | `npm run tauri:build` | 生产构建，输出平台安装包 |
 | `npm run lint` | ESLint 代码检查 |
 | `npm run format` | Prettier 代码格式化 |
+
+默认 sidecar 路径是下载仓库自管的预编译制品：
+
+- release tag：`aria2-sidecar-<aria2Version>`
+- 配置来源：`sidecar-manifest.json`
+- 校验方式：文件格式、可执行性、目标三元组约束，以及目标要求时的
+  `--version`
+
+应急再生路径需要显式开启 `MOTRIX_SIDECAR_REGENERATE=1`：
+
+- Linux / macOS：fallback 到源码构建
+- Windows：fallback 到 aria2 官方预编译归档
+
+Linux fallback 源码构建建议同时设置
+`MOTRIX_SIDECAR_USE_DOCKER=1`，在固定的 `node:22-bullseye` 容器内完成构建，
+避免宿主机 GCC、`libstdc++.a`、`libssh2.a` 及其静态依赖组合差异。
+
+仓库自管 sidecar 的发布入口是 GitHub Actions 工作流
+`Publish Aria2 Sidecars`。它会生成三平台 sidecar、上传到
+`aria2-sidecar-<aria2Version>` release，并附带 `SHA256SUMS.txt`。
+工作流同时会产出一个更新过内部 sidecar SHA256 的
+`sidecar-manifest.json` artifact，便于后续回填到仓库。
 
 ---
 
@@ -550,6 +573,10 @@ Tauri App 启动
 ```
 
 二进制文件命名规则：`motrix-aria2c-{target_triple}`，例如 `motrix-aria2c-x86_64-unknown-linux-gnu`。
+
+平台、版本、归档 URL、SHA256、构建参数和校验规则统一维护在仓库根目录
+`sidecar-manifest.json`。CI 和本地脚本都读取该 manifest，避免各平台 sidecar
+规则散落在 workflow、脚本和文档中。
 
 ---
 

@@ -7,9 +7,6 @@ on:
       - develop
   pull_request:
 
-env:
-  ARIA2_VERSION: "1.37.0"
-
 jobs:
   verify:
     runs-on: ubuntu-22.04
@@ -27,19 +24,8 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf \
-            build-essential \
-            autoconf \
-            automake \
-            autopoint \
-            libtool \
-            pkg-config \
-            libssl-dev \
-            libxml2-dev \
-            libcppunit-dev \
-            zlib1g-dev \
-            libsqlite3-dev \
-            libssh2-1-dev \
-            libc-ares-dev
+            binutils \
+            unzip
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -58,27 +44,23 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Cache aria2 sidecar build
+      - name: Cache aria2 sidecar downloads
         uses: actions/cache@v5
         with:
           path: .sidecar-cache
-          key: aria2-${{ env.ARIA2_VERSION }}-linux-x86_64-unknown-linux-gnu
+          key: aria2-${{ hashFiles('sidecar-manifest.json') }}-linux-x86_64-unknown-linux-gnu
           restore-keys: |
-            aria2-${{ env.ARIA2_VERSION }}-linux-
+            aria2-${{ hashFiles('sidecar-manifest.json') }}-linux-
 
       - name: Prepare aria2c sidecar
         env:
           TARGET_TRIPLE: x86_64-unknown-linux-gnu
-          MOTRIX_ARIA2_VERSION: ${{ env.ARIA2_VERSION }}
         run: node scripts/prepare-sidecar.mjs
 
       - name: Verify aria2c sidecar
-        run: |
-          SIDECAR="src-tauri/binaries/motrix-aria2c-x86_64-unknown-linux-gnu"
-          test -f "$SIDECAR" || { echo "::error::Sidecar not found: $SIDECAR"; exit 1; }
-          test -s "$SIDECAR" || { echo "::error::Sidecar is empty: $SIDECAR"; exit 1; }
-          chmod +x "$SIDECAR"
-          "$SIDECAR" --version || { echo "::error::Sidecar failed version check"; exit 1; }
+        env:
+          TARGET_TRIPLE: x86_64-unknown-linux-gnu
+        run: node scripts/check-sidecar.mjs
 
       - name: Run Node-based tests
         run: node --test tests/*.test.mjs
@@ -100,23 +82,19 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .sidecar-cache
-          key: aria2-${{ env.ARIA2_VERSION }}-windows-x86_64-pc-windows-gnu
+          key: aria2-${{ hashFiles('sidecar-manifest.json') }}-windows-x86_64-pc-windows-gnu
           restore-keys: |
-            aria2-${{ env.ARIA2_VERSION }}-windows-
+            aria2-${{ hashFiles('sidecar-manifest.json') }}-windows-
 
       - name: Prepare Windows aria2c sidecar
         env:
           TARGET_TRIPLE: x86_64-pc-windows-gnu
-          MOTRIX_ARIA2_VERSION: ${{ env.ARIA2_VERSION }}
         run: node scripts/prepare-sidecar.mjs
 
       - name: Verify Windows aria2c sidecar
-        run: |
-          SIDECAR="src-tauri/binaries/motrix-aria2c-x86_64-pc-windows-gnu.exe"
-          test -f "$SIDECAR" || { echo "::error::Windows sidecar not found: $SIDECAR"; exit 1; }
-          test -s "$SIDECAR" || { echo "::error::Windows sidecar is empty: $SIDECAR"; exit 1; }
-          file "$SIDECAR"
-          echo "Windows sidecar verified: $(ls -lh "$SIDECAR")"
+        env:
+          TARGET_TRIPLE: x86_64-pc-windows-gnu
+        run: node scripts/check-sidecar.mjs
 
       - name: Check Rust compilation for Windows
         run: cargo check --target x86_64-pc-windows-gnu

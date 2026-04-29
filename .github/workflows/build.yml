@@ -9,9 +9,6 @@ on:
 permissions:
   contents: write
 
-env:
-  ARIA2_VERSION: "1.37.0"
-
 jobs:
   build-linux:
     runs-on: ubuntu-22.04
@@ -34,19 +31,8 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf \
-            build-essential \
-            autoconf \
-            automake \
-            autopoint \
-            libtool \
-            pkg-config \
-            libssl-dev \
-            libxml2-dev \
-            libcppunit-dev \
-            zlib1g-dev \
-            libsqlite3-dev \
-            libssh2-1-dev \
-            libc-ares-dev
+            binutils \
+            unzip
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -67,28 +53,23 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Cache aria2 sidecar build
+      - name: Cache aria2 sidecar downloads
         uses: actions/cache@v5
         with:
           path: .sidecar-cache
-          key: aria2-${{ env.ARIA2_VERSION }}-linux-${{ matrix.target }}
+          key: aria2-${{ hashFiles('sidecar-manifest.json') }}-linux-${{ matrix.target }}
           restore-keys: |
-            aria2-${{ env.ARIA2_VERSION }}-linux-
+            aria2-${{ hashFiles('sidecar-manifest.json') }}-linux-
 
       - name: Prepare aria2c sidecar
         env:
           TARGET_TRIPLE: ${{ matrix.target }}
-          MOTRIX_ARIA2_VERSION: ${{ env.ARIA2_VERSION }}
         run: node scripts/prepare-sidecar.mjs
 
       - name: Verify aria2c sidecar
-        run: |
-          SIDECAR="src-tauri/binaries/motrix-aria2c-${{ matrix.target }}"
-          test -f "$SIDECAR" || { echo "::error::Sidecar not found: $SIDECAR"; exit 1; }
-          test -s "$SIDECAR" || { echo "::error::Sidecar is empty: $SIDECAR"; exit 1; }
-          chmod +x "$SIDECAR"
-          "$SIDECAR" --version || { echo "::error::Sidecar failed version check"; exit 1; }
-          echo "Sidecar verified: $(ls -lh "$SIDECAR")"
+        env:
+          TARGET_TRIPLE: ${{ matrix.target }}
+        run: node scripts/check-sidecar.mjs
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
@@ -120,7 +101,7 @@ jobs:
 
       - name: Install build dependencies
         run: |
-          brew install autoconf automake libtool pkg-config cppunit gettext
+          brew install gettext
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -141,28 +122,23 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Cache aria2 sidecar build
+      - name: Cache aria2 sidecar downloads
         uses: actions/cache@v5
         with:
           path: .sidecar-cache
-          key: aria2-${{ env.ARIA2_VERSION }}-macos-${{ matrix.target }}
+          key: aria2-${{ hashFiles('sidecar-manifest.json') }}-macos-${{ matrix.target }}
           restore-keys: |
-            aria2-${{ env.ARIA2_VERSION }}-macos-
+            aria2-${{ hashFiles('sidecar-manifest.json') }}-macos-
 
       - name: Prepare aria2c sidecar
         env:
           TARGET_TRIPLE: ${{ matrix.target }}
-          MOTRIX_ARIA2_VERSION: ${{ env.ARIA2_VERSION }}
         run: node scripts/prepare-sidecar.mjs
 
       - name: Verify aria2c sidecar
-        run: |
-          SIDECAR="src-tauri/binaries/motrix-aria2c-${{ matrix.target }}"
-          test -f "$SIDECAR" || { echo "::error::Sidecar not found: $SIDECAR"; exit 1; }
-          test -s "$SIDECAR" || { echo "::error::Sidecar is empty: $SIDECAR"; exit 1; }
-          chmod +x "$SIDECAR"
-          "$SIDECAR" --version || { echo "::error::Sidecar failed version check"; exit 1; }
-          echo "Sidecar verified: $(ls -lh "$SIDECAR")"
+        env:
+          TARGET_TRIPLE: ${{ matrix.target }}
+        run: node scripts/check-sidecar.mjs
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
@@ -202,51 +178,23 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Cache aria2 sidecar download
+      - name: Cache aria2 sidecar downloads
         uses: actions/cache@v5
         with:
           path: .sidecar-cache
-          key: aria2-${{ env.ARIA2_VERSION }}-windows-x86_64-pc-windows-msvc
+          key: aria2-${{ hashFiles('sidecar-manifest.json') }}-windows-x86_64-pc-windows-msvc
           restore-keys: |
-            aria2-${{ env.ARIA2_VERSION }}-windows-
+            aria2-${{ hashFiles('sidecar-manifest.json') }}-windows-
 
       - name: Prepare aria2c sidecar
         env:
           TARGET_TRIPLE: x86_64-pc-windows-msvc
-          MOTRIX_ARIA2_VERSION: ${{ env.ARIA2_VERSION }}
         run: node scripts/prepare-sidecar.mjs
 
       - name: Verify aria2c sidecar
-        shell: pwsh
-        run: |
-          $sidecar = "src-tauri/binaries/motrix-aria2c-x86_64-pc-windows-msvc.exe"
-          if (-not (Test-Path $sidecar)) {
-            Write-Error "Sidecar not found: $sidecar"
-            exit 1
-          }
-          $size = (Get-Item $sidecar).Length
-          if ($size -eq 0) {
-            Write-Error "Sidecar is empty: $sidecar"
-            exit 1
-          }
-          # Verify it is a valid PE executable
-          $header = [System.Text.Encoding]::ASCII.GetString((Get-Content $sidecar -AsByteStream -TotalCount 2))
-          if ($header -ne 'MZ') {
-            Write-Error "Sidecar is not a valid PE executable (expected MZ header, got: $header)"
-            exit 1
-          }
-          Write-Host "Sidecar verified: $sidecar ($size bytes, valid PE)"
-          # Execute version check to verify binary works (no DLL missing, no launch error)
-          try {
-            & $sidecar --version 2>&1 | ForEach-Object { Write-Host "aria2c: $_" }
-            if ($LASTEXITCODE -ne 0) {
-              Write-Error "Sidecar version check returned exit code $LASTEXITCODE"
-              exit 1
-            }
-          } catch {
-            Write-Error "Sidecar failed to execute: $_"
-            exit 1
-          }
+        env:
+          TARGET_TRIPLE: x86_64-pc-windows-msvc
+        run: node scripts/check-sidecar.mjs
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0

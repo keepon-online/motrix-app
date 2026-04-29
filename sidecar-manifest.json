@@ -1,0 +1,204 @@
+{
+  "aria2Version": "1.37.0",
+  "artifacts": {
+    "aria2-source": {
+      "type": "source-tarball",
+      "url": "https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0.tar.xz",
+      "archiveName": "aria2-1.37.0.tar.xz",
+      "extractDir": "aria2-1.37.0",
+      "sha256": "60a420ad7085eb616cb6e2bdf0a7206d68ff3d37fb5a956dc44242eb2f79b66b"
+    },
+    "aria2-windows-x86_64-upstream": {
+      "type": "windows-zip",
+      "url": "https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip",
+      "archiveName": "aria2-1.37.0-win-64bit-build1.zip",
+      "extractDir": "aria2-1.37.0-win-64bit-build1",
+      "binaryName": "aria2c.exe",
+      "sha256": "67d015301eef0b612191212d564c5bb0a14b5b9c4796b76454276a4d28d9b288"
+    },
+    "motrix-sidecar-linux-x86_64": {
+      "type": "raw-binary",
+      "url": "https://github.com/keepon-online/motrix-app/releases/download/aria2-sidecar-1.37.0/motrix-aria2c-x86_64-unknown-linux-gnu",
+      "fileName": "motrix-aria2c-x86_64-unknown-linux-gnu"
+    },
+    "motrix-sidecar-macos-aarch64": {
+      "type": "raw-binary",
+      "url": "https://github.com/keepon-online/motrix-app/releases/download/aria2-sidecar-1.37.0/motrix-aria2c-aarch64-apple-darwin",
+      "fileName": "motrix-aria2c-aarch64-apple-darwin"
+    },
+    "motrix-sidecar-macos-x86_64": {
+      "type": "raw-binary",
+      "url": "https://github.com/keepon-online/motrix-app/releases/download/aria2-sidecar-1.37.0/motrix-aria2c-x86_64-apple-darwin",
+      "fileName": "motrix-aria2c-x86_64-apple-darwin"
+    },
+    "motrix-sidecar-windows-x86_64-gnu": {
+      "type": "raw-binary",
+      "url": "https://github.com/keepon-online/motrix-app/releases/download/aria2-sidecar-1.37.0/motrix-aria2c-x86_64-pc-windows-gnu.exe",
+      "fileName": "motrix-aria2c-x86_64-pc-windows-gnu.exe"
+    },
+    "motrix-sidecar-windows-x86_64-msvc": {
+      "type": "raw-binary",
+      "url": "https://github.com/keepon-online/motrix-app/releases/download/aria2-sidecar-1.37.0/motrix-aria2c-x86_64-pc-windows-msvc.exe",
+      "fileName": "motrix-aria2c-x86_64-pc-windows-msvc.exe"
+    }
+  },
+  "targets": {
+    "x86_64-unknown-linux-gnu": {
+      "platform": "linux",
+      "strategy": "release-download",
+      "artifact": "motrix-sidecar-linux-x86_64",
+      "fallbackStrategy": "source-build",
+      "fallbackArtifact": "aria2-source",
+      "configureArgs": [
+        "--without-gnutls",
+        "--with-openssl",
+        "--without-libgcrypt",
+        "--without-libxml2",
+        "--with-libexpat",
+        "--without-libcares",
+        "--with-libssh2",
+        "--with-sqlite3",
+        "--with-ca-bundle=/etc/ssl/certs/ca-certificates.crt"
+      ],
+      "configureEnv": {
+        "ARIA2_STATIC": "yes"
+      },
+      "dockerBuild": {
+        "image": "node:22-bullseye",
+        "env": {
+          "LIBSSH2_LIBS": "-lssh2 -lgcrypt -lgpg-error -lz"
+        },
+        "packages": [
+          "autoconf",
+          "automake",
+          "autopoint",
+          "libtool",
+          "pkg-config",
+          "build-essential",
+          "binutils",
+          "libssl-dev",
+          "libexpat1-dev",
+          "libcppunit-dev",
+          "zlib1g-dev",
+          "libsqlite3-dev",
+          "libssh2-1-dev",
+          "libgpg-error-dev",
+          "ca-certificates",
+          "curl",
+          "unzip"
+        ]
+      },
+      "requiredBuildTools": ["autoreconf", "make", "pkg-config", "libtoolize"],
+      "requiredStaticLibraries": [
+        {
+          "name": "libc.a",
+          "paths": ["/usr/lib/x86_64-linux-gnu/libc.a"]
+        },
+        {
+          "name": "libdl.a",
+          "paths": ["/usr/lib/x86_64-linux-gnu/libdl.a"]
+        },
+        {
+          "name": "libpthread.a",
+          "paths": ["/usr/lib/x86_64-linux-gnu/libpthread.a"]
+        },
+        {
+          "name": "librt.a",
+          "paths": ["/usr/lib/x86_64-linux-gnu/librt.a"]
+        },
+        {
+          "name": "libz.a",
+          "paths": ["/usr/lib/x86_64-linux-gnu/libz.a"]
+        },
+        {
+          "name": "libexpat.a",
+          "paths": ["/usr/lib/x86_64-linux-gnu/libexpat.a"]
+        },
+        {
+          "name": "libsqlite3.a",
+          "paths": ["/usr/lib/x86_64-linux-gnu/libsqlite3.a"]
+        },
+        {
+          "name": "libssl.a",
+          "paths": ["/usr/lib/x86_64-linux-gnu/libssl.a"]
+        },
+        {
+          "name": "libcrypto.a",
+          "paths": ["/usr/lib/x86_64-linux-gnu/libcrypto.a"]
+        },
+        {
+          "name": "libssh2.a",
+          "paths": ["/usr/lib/x86_64-linux-gnu/libssh2.a"]
+        },
+        {
+          "name": "libgpg-error.a",
+          "paths": ["/usr/lib/x86_64-linux-gnu/libgpg-error.a"]
+        },
+        {
+          "name": "libstdc++.a",
+          "paths": [
+            "/usr/lib/gcc/x86_64-linux-gnu/13/libstdc++.a",
+            "/usr/lib/gcc/x86_64-linux-gnu/12/libstdc++.a",
+            "/usr/lib/gcc/x86_64-linux-gnu/11/libstdc++.a"
+          ],
+          "resolveCommands": [
+            ["g++", "-print-file-name=libstdc++.a"],
+            ["gcc", "-print-file-name=libstdc++.a"]
+          ]
+        }
+      ],
+      "validation": {
+        "format": "elf",
+        "portableLinux": true,
+        "runVersion": true
+      }
+    },
+    "x86_64-pc-windows-gnu": {
+      "platform": "windows",
+      "strategy": "release-download",
+      "artifact": "motrix-sidecar-windows-x86_64-gnu",
+      "fallbackStrategy": "windows-archive",
+      "fallbackArtifact": "aria2-windows-x86_64-upstream",
+      "validation": {
+        "format": "pe"
+      }
+    },
+    "x86_64-pc-windows-msvc": {
+      "platform": "windows",
+      "strategy": "release-download",
+      "artifact": "motrix-sidecar-windows-x86_64-msvc",
+      "fallbackStrategy": "windows-archive",
+      "fallbackArtifact": "aria2-windows-x86_64-upstream",
+      "validation": {
+        "format": "pe",
+        "runVersion": true
+      }
+    },
+    "aarch64-apple-darwin": {
+      "platform": "macos",
+      "strategy": "release-download",
+      "artifact": "motrix-sidecar-macos-aarch64",
+      "fallbackStrategy": "source-build",
+      "fallbackArtifact": "aria2-source",
+      "configureArgs": ["--without-gnutls", "--with-appletls", "--without-libgcrypt"],
+      "configureEnv": {},
+      "requiredBuildTools": ["autoreconf", "make", "pkg-config"],
+      "validation": {
+        "runVersion": true
+      }
+    },
+    "x86_64-apple-darwin": {
+      "platform": "macos",
+      "strategy": "release-download",
+      "artifact": "motrix-sidecar-macos-x86_64",
+      "fallbackStrategy": "source-build",
+      "fallbackArtifact": "aria2-source",
+      "configureArgs": ["--without-gnutls", "--with-appletls", "--without-libgcrypt"],
+      "configureEnv": {},
+      "requiredBuildTools": ["autoreconf", "make", "pkg-config"],
+      "validation": {
+        "runVersion": true
+      }
+    }
+  }
+}

@@ -69,11 +69,24 @@ npm run tauri:dev
 |------|------|
 | `npm run dev` | 仅启动 Vite 开发服务器 |
 | `npm run build` | TypeScript 检查 + Vite 构建 |
-| `npm run sidecar:prepare` | 为当前目标复用或自动下载/构建真实的 aria2c sidecar |
+| `npm run sidecar:prepare` | 按 `sidecar-manifest.json` 为当前目标准备 aria2c sidecar |
+| `npm run sidecar:check` | 按 manifest 规则校验已准备的 sidecar |
 | `npm run tauri:dev` | 完整 Tauri 开发模式 |
 | `npm run tauri:build` | 生产构建 |
 | `npm run lint` | ESLint 代码检查 |
 | `npm run format` | Prettier 格式化 |
+
+aria2 sidecar 由 `sidecar-manifest.json` 统一管理。默认构建会从
+`aria2-sidecar-<version>` 这个 GitHub Release tag 下载仓库自管的预编译
+sidecar，并按 manifest 规则校验。
+
+应急再生路径需要显式开启：设置 `MOTRIX_SIDECAR_REGENERATE=1` 后，会切到
+目标平台配置的 fallback 策略。Linux 和 macOS fallback 到源码构建；
+Windows fallback 到 aria2 官方预编译归档。
+
+仓库自管的 sidecar 制品通过 `Publish Aria2 Sidecars` GitHub Actions 工作流
+发布或刷新。该工作流还会产出一个更新过 SHA256 的
+`sidecar-manifest.json` artifact。
 
 详细架构文档请参阅 [DEVELOPMENT.md](./DEVELOPMENT.md)。
 

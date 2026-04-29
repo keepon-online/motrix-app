@@ -69,11 +69,24 @@ npm run tauri:dev
 |---------|-------------|
 | `npm run dev` | Start Vite dev server only |
 | `npm run build` | TypeScript check + Vite build |
-| `npm run sidecar:prepare` | Reuse or download/build a real aria2c sidecar for the current target |
+| `npm run sidecar:prepare` | Prepare the aria2c sidecar declared in `sidecar-manifest.json` for the current target |
+| `npm run sidecar:check` | Validate the prepared sidecar against the manifest rules |
 | `npm run tauri:dev` | Full Tauri development mode |
 | `npm run tauri:build` | Production build |
 | `npm run lint` | ESLint check |
 | `npm run format` | Prettier format |
+
+Aria2 sidecars are managed by `sidecar-manifest.json`. Default builds download
+repository-managed prebuilt sidecars from the `aria2-sidecar-<version>` GitHub
+release tag and validate the result against the manifest rules.
+
+Emergency regeneration is explicit. Use `MOTRIX_SIDECAR_REGENERATE=1` to switch
+to the target's fallback strategy. Linux and macOS fall back to source builds;
+Windows falls back to the upstream official aria2 archive.
+
+Publish or refresh repository-managed sidecars with the
+`Publish Aria2 Sidecars` GitHub Actions workflow. It also emits an updated
+`sidecar-manifest.json` artifact with refreshed prebuilt sidecar SHA256 values.
 
 See [DEVELOPMENT.md](./DEVELOPMENT.md) for detailed architecture documentation.
 

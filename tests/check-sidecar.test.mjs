@@ -44,3 +44,44 @@ test('validateSidecar accepts a non-empty executable', async () => {
 
   await assert.doesNotReject(sidecarModule.validateSidecar(sidecarPath))
 })
+
+test('validateSidecar validates Windows targets even when host is not Windows', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'motrix-sidecar-test-'))
+  const sidecarPath = path.join(tempDir, 'motrix-aria2c-x86_64-pc-windows-gnu.exe')
+  await fs.writeFile(sidecarPath, Buffer.from([0x7f, 0x45, 0x4c, 0x46]))
+
+  await assert.rejects(
+    sidecarModule.validateSidecar(sidecarPath, {
+      targetTriple: 'x86_64-pc-windows-gnu',
+    }),
+    /valid Windows executable/,
+  )
+})
+
+test('parseNeededLibraries extracts ELF NEEDED entries', () => {
+  const output = `
+Dynamic Section:
+  NEEDED               libssl.so.3
+  NEEDED               libcrypto.so.3
+`
+
+  assert.deepEqual(
+    sidecarModule.parseNeededLibraries(output),
+    ['libssl.so.3', 'libcrypto.so.3'],
+  )
+})
+
+test('validateSidecar rejects dynamically linked Linux sidecars when portability is required', async (t) => {
+  if (process.platform !== 'linux') {
+    t.skip('Linux dynamic-link validation is only meaningful on Linux hosts')
+    return
+  }
+
+  await assert.rejects(
+    sidecarModule.validateSidecar('/bin/ls', {
+      targetTriple: 'x86_64-unknown-linux-gnu',
+      requirePortableLinux: true,
+    }),
+    /dynamically linked/,
+  )
+})
