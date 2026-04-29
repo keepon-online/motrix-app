@@ -2,8 +2,9 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Task, GlobalStat, AddTaskOptions } from '@/types'
 import { invoke } from '@tauri-apps/api/core'
+import { useAppStore } from '@/stores/app'
+import { getPostAddTaskListType, type TaskListType } from '@/utils/taskVisibility'
 
-type TaskListType = 'active' | 'waiting' | 'stopped'
 type SortField = 'name' | 'size' | 'progress' | 'speed' | 'default'
 type SortOrder = 'asc' | 'desc'
 
@@ -104,10 +105,19 @@ export const useTaskStore = defineStore('task', () => {
     }
   }
 
+  async function refreshAfterTaskAdded() {
+    const appStore = useAppStore()
+    const listType = getPostAddTaskListType(
+      currentListType.value,
+      appStore.config?.newTaskShowDownloading,
+    )
+    await fetchTasks(listType)
+  }
+
   async function addUri(uris: string[], options?: AddTaskOptions) {
     try {
       await invoke('add_uri', { uris, options })
-      await fetchTasks()
+      await refreshAfterTaskAdded()
     } catch (error) {
       console.error('Failed to add URI:', error)
       throw error
@@ -117,7 +127,7 @@ export const useTaskStore = defineStore('task', () => {
   async function addTorrent(torrent: string, options?: AddTaskOptions) {
     try {
       await invoke('add_torrent', { torrent, options })
-      await fetchTasks()
+      await refreshAfterTaskAdded()
     } catch (error) {
       console.error('Failed to add torrent:', error)
       throw error
@@ -127,9 +137,29 @@ export const useTaskStore = defineStore('task', () => {
   async function addMetalink(metalink: string, options?: AddTaskOptions) {
     try {
       await invoke('add_metalink_file_base64', { metalink, options })
-      await fetchTasks()
+      await refreshAfterTaskAdded()
     } catch (error) {
       console.error('Failed to add metalink:', error)
+      throw error
+    }
+  }
+
+  async function addTorrentFile(filePath: string, options?: AddTaskOptions) {
+    try {
+      await invoke('add_torrent_file', { filePath, options })
+      await refreshAfterTaskAdded()
+    } catch (error) {
+      console.error('Failed to add torrent file:', error)
+      throw error
+    }
+  }
+
+  async function addMetalinkFile(filePath: string, options?: AddTaskOptions) {
+    try {
+      await invoke('add_metalink_file', { filePath, options })
+      await refreshAfterTaskAdded()
+    } catch (error) {
+      console.error('Failed to add metalink file:', error)
       throw error
     }
   }
@@ -371,6 +401,8 @@ export const useTaskStore = defineStore('task', () => {
     addUri,
     addTorrent,
     addMetalink,
+    addTorrentFile,
+    addMetalinkFile,
     pauseTask,
     resumeTask,
     removeTask,

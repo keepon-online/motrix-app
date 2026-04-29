@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, inject, type Ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
 import { useAppStore } from '@/stores/app'
@@ -8,6 +9,7 @@ import { readText } from '@tauri-apps/plugin-clipboard-manager'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage } from 'element-plus'
 import { formatBytes, decodeThunderUrl, isUrl } from '@/utils'
+import { shouldShowDownloadingAfterAdd } from '@/utils/taskVisibility'
 
 interface TorrentFileInfo {
   index: number
@@ -26,6 +28,7 @@ const visible = defineModel<boolean>({ default: false })
 
 const taskStore = useTaskStore()
 const appStore = useAppStore()
+const router = useRouter()
 
 // Receive pending URLs from App.vue (CLI args, deep links, second instance)
 const pendingUrls = inject<Ref<string[]>>('pendingUrls', ref([]))
@@ -117,7 +120,7 @@ async function selectTorrent() {
       const info = await invoke<TorrentInfo>('parse_torrent_file', { filePath })
       torrentInfo.value = info
       // Select all files by default
-      selectedFileIndices.value = info.files.map(f => f.index)
+      selectedFileIndices.value = info.files.map((f: TorrentFileInfo) => f.index)
     } catch (e) {
       console.warn('Failed to parse torrent:', e)
       torrentInfo.value = null
@@ -210,7 +213,7 @@ async function submit() {
         await taskStore.addUri([uri], options)
       }
     } else if (activeTab.value === 'metalink' && metalinkFilePath.value) {
-      await invoke('add_metalink_file', { filePath: metalinkFilePath.value, options })
+      await taskStore.addMetalinkFile(metalinkFilePath.value, options)
     } else if (torrentFile.value) {
       // Add select-file option if user has deselected some files
       if (torrentInfo.value && selectedFileIndices.value.length > 0
@@ -222,7 +225,13 @@ async function submit() {
           .join(',')
         options['select-file'] = indices
       }
-      await invoke('add_torrent_file', { filePath: torrentFilePath.value, options })
+      if (torrentFilePath.value) {
+        await taskStore.addTorrentFile(torrentFilePath.value, options)
+      }
+    }
+
+    if (shouldShowDownloadingAfterAdd(appStore.config?.newTaskShowDownloading)) {
+      await router.push('/tasks/active')
     }
 
     resetForm()
