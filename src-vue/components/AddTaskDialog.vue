@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, watch, inject, type Ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
 import { useAppStore } from '@/stores/app'
@@ -9,7 +8,6 @@ import { readText } from '@tauri-apps/plugin-clipboard-manager'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage } from 'element-plus'
 import { formatBytes, decodeThunderUrl, isUrl } from '@/utils'
-import { shouldShowDownloadingAfterAdd } from '@/utils/taskVisibility'
 
 interface TorrentFileInfo {
   index: number
@@ -28,7 +26,6 @@ const visible = defineModel<boolean>({ default: false })
 
 const taskStore = useTaskStore()
 const appStore = useAppStore()
-const router = useRouter()
 
 // Receive pending URLs from App.vue (CLI args, deep links, second instance)
 const pendingUrls = inject<Ref<string[]>>('pendingUrls', ref([]))
@@ -228,10 +225,6 @@ async function submit() {
       if (torrentFilePath.value) {
         await taskStore.addTorrentFile(torrentFilePath.value, options)
       }
-    }
-
-    if (shouldShowDownloadingAfterAdd(appStore.config?.newTaskShowDownloading)) {
-      await router.push('/tasks/active')
     }
 
     resetForm()

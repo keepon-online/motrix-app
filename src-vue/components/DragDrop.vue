@@ -1,17 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useTaskStore } from '@/stores/task'
 import { useAppStore } from '@/stores/app'
 import { ElMessage } from 'element-plus'
 import { decodeThunderUrl, isUrl } from '@/utils'
-import { shouldShowDownloadingAfterAdd } from '@/utils/taskVisibility'
 
 const { t } = useI18n()
 const taskStore = useTaskStore()
 const appStore = useAppStore()
-const router = useRouter()
 const isDragging = ref(false)
 
 function isTorrentFile(name: string): boolean {
@@ -44,13 +41,11 @@ async function handleDrop(e: DragEvent) {
   // Handle dropped files
   const files = e.dataTransfer.files
   if (files.length > 0) {
-    let added = false
     for (const file of Array.from(files)) {
       if (isTorrentFile(file.name)) {
         try {
           const base64 = await fileToBase64(file)
           await taskStore.addTorrent(base64, { dir: appStore.downloadDir })
-          added = true
           ElMessage.success(`${t('dialog.addTask')}: ${file.name}`)
         } catch (error) {
           ElMessage.error(`${t('task.error')}: ${file.name}`)
@@ -59,15 +54,11 @@ async function handleDrop(e: DragEvent) {
         try {
           const base64 = await fileToBase64(file)
           await taskStore.addMetalink(base64, { dir: appStore.downloadDir })
-          added = true
           ElMessage.success(`${t('dialog.addTask')}: ${file.name}`)
         } catch (error) {
           ElMessage.error(`${t('task.error')}: ${file.name}`)
         }
       }
-    }
-    if (added && shouldShowDownloadingAfterAdd(appStore.config?.newTaskShowDownloading)) {
-      await router.push('/tasks/active')
     }
     return
   }
@@ -80,9 +71,6 @@ async function handleDrop(e: DragEvent) {
       try {
         for (const url of urls) {
           await taskStore.addUri([url], { dir: appStore.downloadDir })
-        }
-        if (shouldShowDownloadingAfterAdd(appStore.config?.newTaskShowDownloading)) {
-          await router.push('/tasks/active')
         }
         ElMessage.success(`${t('dialog.addTask')}: ${urls.length}`)
       } catch (error) {

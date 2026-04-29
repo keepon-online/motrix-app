@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 
 const visibilityModule = await import('../src-vue/utils/taskVisibility.ts')
 
@@ -30,4 +31,16 @@ test('show-downloading defaults to enabled when config is absent', () => {
     visibilityModule.shouldShowDownloadingAfterAdd(undefined),
     true,
   )
+})
+
+test('add task flows do not navigate while submitting', async () => {
+  const files = [
+    'src-vue/components/AddTaskDialog.vue',
+    'src-vue/components/DragDrop.vue',
+  ]
+
+  for (const file of files) {
+    const source = await readFile(file, 'utf8')
+    assert.doesNotMatch(source, /router\.(push|replace)\(/)
+  }
 })

@@ -49,6 +49,9 @@ const menuItems = computed(() => [
 ])
 
 const isActive = (path: string) => {
+  if (path.startsWith('/tasks/')) {
+    return path === `/tasks/${taskStore.currentListType}`
+  }
   return route.path === path
 }
 

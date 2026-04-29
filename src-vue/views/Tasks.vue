@@ -10,6 +10,7 @@ import TaskItem from '@/components/TaskItem.vue'
 import TaskToolbar from '@/components/TaskToolbar.vue'
 import TaskDetail from '@/components/TaskDetail.vue'
 import AddTaskDialog from '@/components/AddTaskDialog.vue'
+import type { TaskListType } from '@/utils/taskVisibility'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -34,22 +35,26 @@ let lastSelectedIndex = -1
 let visibilityHandler: (() => void) | null = null
 
 const pageTitle = computed(() => {
-  const status = route.params.status as string
+  const status = taskStore.currentListType
   if (status === 'stopped') return t('nav.stopped')
   if (status === 'waiting') return t('nav.waiting')
   return t('nav.downloads')
 })
 
-// Fetch tasks based on route
-const fetchTasks = () => {
+function routeStatusToListType(status: unknown): TaskListType {
+  if (status === 'stopped' || status === 'waiting') return status
+  return 'active'
+}
+
+// User route changes select the visible list.
+const fetchRouteTasks = () => {
   const status = route.params.status as string
-  if (status === 'stopped') {
-    taskStore.fetchTasks('stopped')
-  } else if (status === 'waiting') {
-    taskStore.fetchTasks('waiting')
-  } else {
-    taskStore.fetchTasks('active')
-  }
+  taskStore.fetchTasks(routeStatusToListType(status))
+}
+
+// Polling refreshes the already-visible list so post-add visibility is stable.
+const refreshVisibleTasks = () => {
+  taskStore.fetchTasks()
 }
 
 // Dynamic polling interval based on active task count
@@ -64,7 +69,7 @@ function setupInterval() {
   if (refreshInterval) clearInterval(refreshInterval)
   currentInterval = getPollingInterval()
   refreshInterval = window.setInterval(() => {
-    fetchTasks()
+    refreshVisibleTasks()
     taskStore.fetchGlobalStat()
     // Check if interval needs adjusting
     const newInterval = getPollingInterval()
@@ -78,7 +83,7 @@ onMounted(() => {
   // React to engine state changes: start polling when ready, stop when disconnected
   watch(engineReady, (ready) => {
     if (ready) {
-      fetchTasks()
+      fetchRouteTasks()
       taskStore.fetchGlobalStat()
       setupInterval()
     } else if (refreshInterval) {
@@ -99,7 +104,7 @@ onMounted(() => {
   visibilityHandler = () => {
     if (document.visibilityState === 'visible') {
       if (engineReady.value) {
-        fetchTasks()
+        refreshVisibleTasks()
         taskStore.fetchGlobalStat()
         setupInterval()
       }
@@ -123,7 +128,7 @@ onUnmounted(() => {
 // Watch route changes
 watch(() => route.params.status, () => {
   taskStore.clearSelection()
-  fetchTasks()
+  fetchRouteTasks()
 })
 
 // Shift+Click range selection
